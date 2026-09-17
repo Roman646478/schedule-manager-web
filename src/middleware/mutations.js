@@ -5,7 +5,7 @@ const { transaction } = require('../services/dbService');
 const { sortTopics } = require('../services/topicOrderService');
 const { getSetting, setSetting } = require('../services/settingsService');
 
-const READ_ONLY = /^\/(export\/|login$|logout$)/;
+const READ_ONLY = /^\/(export\/|import\/preview$|login$|logout$)/;
 const OUTSIDE_SNAPSHOT = /^\/(publish|guest-[a-z]+|move-marks|appearance|password|reset-password|widget-host|room-plan\/settings|guest\/lesson\/\d+|archives(\/[^/]+)?)$/;
 
 function finalizeMutation(req, res) {

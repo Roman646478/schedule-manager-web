@@ -182,7 +182,7 @@
         <details class="sb-cat">
           <summary>Импорт расписания</summary>
           <div class="group">
-            <input type="file" id="fileInput" multiple accept=".html,.htm">
+            <input type="file" id="fileInput" multiple accept=".html,.htm,.xlsx">
             <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
             <button class="btn sm block secondary" id="btnPickFolder" type="button">Выбрать папку…</button>
             <label class="chk-lbl"><input type="checkbox" id="importMerge" checked> Дополнять существующую базу</label>
@@ -193,6 +193,7 @@
             </label>
             <button class="btn sm block" id="btnImport">Загрузить и собрать</button>
             <div class="file-status" id="importStatus"></div>
+            <div class="file-status" id="importPreview"></div>
           </div>
         </details>
       </div>

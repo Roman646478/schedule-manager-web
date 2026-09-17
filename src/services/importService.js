@@ -455,7 +455,7 @@ function importFiles(files, mode = 'merge', opts = {}) {
   });
   const teacherCandidates = []; // { file, autoOff, name }
   for (const f of files) {
-    const r = parseSchedule(f.buffer, f.kindHint);
+    const r = f.parsed || parseSchedule(f.buffer, f.kindHint);
     applyAliases(r, subjectAliases);
     const off = manualOffset != null ? manualOffset : autoOffset(r, semester);
     if (r.kind === FILE_KIND.TEACHER) {

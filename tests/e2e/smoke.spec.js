@@ -3,6 +3,7 @@
 
 const { test, expect } = require('@playwright/test');
 const path = require('node:path');
+const ExcelJS = require('exceljs');
 
 async function login(page) {
   await page.goto('/login.html');
@@ -69,6 +70,36 @@ test('импорт, перенос, отмена и публикация вид�
   await guest.locator('#entitySelect').selectOption('999');
   await expect(guest.locator('#grid')).toContainText('ТЕСТ');
   await guest.close();
+});
+
+test('Excel показывает подсказку распознавания до импорта', async ({ page }) => {
+  await login(page);
+  await page.getByText('Импорт расписания', { exact: true }).click();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Расписание');
+  ws.getCell('A2').value = '2025/2026 учебный год';
+  ws.getCell('A5').value = 'Учебная группа 978';
+  ws.getCell('A10').value = 'День недели';
+  ws.getCell('C10').value = 'Уч. недели';
+  ws.getCell('D10').value = 1;
+  ws.getCell('C11').value = 'Даты';
+  ws.getCell('D11').value = new Date('2026-02-09T00:00:00Z');
+  ws.getCell('A12').value = 'Пн';
+  ws.getCell('B12').value = '1-2';
+  ws.getCell('C12').value = '9.00-10.35';
+  ws.getCell('D12').value = 'П/Т.2\nXLSX-E2E\n430-7';
+  await page.locator('#fileInput').setInputFiles({
+    name: '978.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: Buffer.from(await wb.xlsx.writeBuffer()),
+  });
+  await expect(page.locator('#importPreview')).toContainText('Excel: пара в одной ячейке');
+  await expect(page.locator('#importPreview')).toContainText('группа 978');
+  await expect(page.locator('#importPreview')).toContainText('XLSX-E2E');
+  await page.locator('#btnImport').click();
+  await expect(page.locator('#importStatus')).toContainText('Готово', { timeout: 15_000 });
+  const imported = await page.evaluate(() => window.api.get('/api/schedule?view=group&id=978'));
+  expect(imported.lessons.some((lesson) => lesson.subject === 'XLSX-E2E')).toBeTruthy();
 });
 
 test('неверный пароль оставляет пользователя на форме и показывает ошибку', async ({ page }) => {

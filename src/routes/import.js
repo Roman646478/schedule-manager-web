@@ -5,18 +5,57 @@ const multer = require('multer');
 const { boundedMemoryStorage } = require('../middleware/boundedUpload');
 const { requireAuth } = require('../middleware/auth');
 const { importFiles } = require('../services/importService');
+const { parseSchedule } = require('../parsers/htmlScheduleParser');
+const { parseExcelSchedule } = require('../parsers/excelScheduleParser');
 const { getSemester, getSubjectAliases } = require('../services/settingsService');
 
 const router = commandRouter();
 
-const MAX_FILE_BYTES = 2 * 1024 * 1024; // HTML-расписание весит десятки КБ — 2 МБ с запасом
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // Excel с оформлением заметно крупнее HTML
 const MAX_FILES = 1200; // ~1000 преподавателей за раз с запасом
 
-// Принимаем только HTML (по расширению или MIME) — прочее молча отбрасываем.
+// Принимаем HTML и Excel-расписания.
 function fileFilter(req, file, cb) {
-  const ok = /\.html?$/i.test(file.originalname) || /html/i.test(file.mimetype || '');
+  const ok = /\.(html?|xlsx)$/i.test(file.originalname) || /(html|spreadsheetml)/i.test(file.mimetype || '');
   cb(null, ok);
 }
+
+async function parsedFiles(uploaded) {
+  return Promise.all((uploaded || []).map(async (file) => {
+    const parsed = /\.xlsx$/i.test(file.originalname)
+      ? await parseExcelSchedule(file.buffer, file.originalname)
+      : parseSchedule(file.buffer);
+    return { buffer: file.buffer, name: file.originalname, parsed };
+  }));
+}
+
+function prepareUploaded(req, res, next) {
+  parsedFiles(req.files).then((files) => { req.importFiles = files; next(); }, next);
+}
+
+const sampleOf = (lesson) => ({
+  day: lesson.day, pairNo: lesson.pairNo, weekNo: lesson.weekNo,
+  type: lesson.type, topic: lesson.topic, subject: lesson.subject,
+  room: (lesson.rooms || []).join(', '),
+});
+
+router.post('/import/preview', requireAuth, handleUpload, prepareUploaded, (req, res) => {
+  try {
+    const files = req.importFiles;
+    if (!files.length) return res.status(400).json({ error: 'Не переданы файлы' });
+    res.json({ files: files.map(({ name, parsed }) => ({
+      name,
+      kind: parsed.kind,
+      owner: parsed.owner,
+      format: parsed.excelFormat || 'html',
+      gridRow: parsed.gridRow || null,
+      firstDate: parsed.firstDate || null,
+      weeks: (parsed.weeks || []).filter((w) => w.weekNo).length,
+      lessons: (parsed.lessons || []).length,
+      examples: (parsed.lessons || []).filter((l) => l.category !== 'event').slice(0, 4).map(sampleOf),
+    })) });
+  } catch (err) { throw err; }
+});
 
 const upload = multer({
   storage: boundedMemoryStorage(64 * 1024 * 1024),
@@ -50,11 +89,11 @@ function parseManualOffset(body) {
 
 // Загрузка набора HTML-файлов (группы/аудитории/преподаватели) и сборка
 // единого источника. Поле формы — "files".
-router.post('/import', requireAuth, handleUpload, (req, res, next) => {
+router.post('/import', requireAuth, handleUpload, prepareUploaded, (req, res) => {
   try {
     // Имя файла нужно отчёту (problemFiles): по нему фронт находит исходный File
     // для повторного импорта с ручным сдвигом.
-    const files = (req.files || []).map((f) => ({ buffer: f.buffer, name: f.originalname }));
+    const files = req.importFiles;
     if (!files.length) return res.status(400).json({ error: 'Не переданы файлы' });
     const mode = req.body && req.body.mode === 'replace' ? 'replace' : 'merge';
     const report = importFiles(files, mode, {
@@ -65,9 +104,7 @@ router.post('/import', requireAuth, handleUpload, (req, res, next) => {
       filterTeachers: !(req.body && String(req.body.filterTeachers) === 'false'),
     });
     res.json({ success: true, report });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { throw err; }
 });
 
 module.exports = router;

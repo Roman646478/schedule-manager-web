@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs');
 const http = require('node:http');
+const ExcelJS = require('exceljs');
 
 const TMPDIR = fs.mkdtempSync(path.join(os.tmpdir(), 'sched-api-'));
 process.env.DB_PATH = path.join(TMPDIR, 'schedule.db');
@@ -132,10 +133,50 @@ test('импорт: не-HTML файл отбрасывается → 400', asyn
 
 test('импорт: файл больше лимита → 400', async () => {
   const form = new FormData();
-  const big = new Uint8Array(3 * 1024 * 1024); // 3 МБ > лимита 2 МБ
+  const big = new Uint8Array(11 * 1024 * 1024); // 11 МБ > лимита 10 МБ
   form.append('files', new Blob([big], { type: 'text/html' }), 'big.html');
   const res = await api('POST', '/api/import', { form });
   assert.equal(res.status, 400);
+});
+
+test('Excel сначала показывает проверку распознавания, затем импортируется', async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Расписание');
+  ws.getCell('A2').value = 'Расписание на весенний семестр';
+  ws.getCell('A3').value = '2025/2026 учебный год';
+  ws.getCell('A7').value = 'Учебная группа 977';
+  ws.getCell('A12').value = 'День недели';
+  ws.getCell('C12').value = 'Уч. недели';
+  ws.getCell('D12').value = 1;
+  ws.getCell('C13').value = 'Даты';
+  ws.getCell('D13').value = new Date('2026-02-09T00:00:00Z');
+  ws.getCell('A14').value = 'Пн';
+  ws.getCell('B14').value = '1-2';
+  ws.getCell('C14').value = '9.00-10.35';
+  ws.getCell('D14').value = 'П/Т.4\nТЕСТ-XLSX\n430-7';
+  const bytes = Buffer.from(await wb.xlsx.writeBuffer());
+  const makeForm = () => {
+    const form = new FormData();
+    form.append('files', new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), '977.xlsx');
+    return form;
+  };
+
+  const preview = await api('POST', '/api/import/preview', { form: makeForm() });
+  assert.equal(preview.status, 200);
+  const detected = (await preview.json()).files[0];
+  assert.deepEqual(
+    { owner: detected.owner, format: detected.format, gridRow: detected.gridRow, lessons: detected.lessons },
+    { owner: '977', format: 'single-cell', gridRow: 12, lessons: 1 }
+  );
+  assert.equal(detected.examples[0].subject, 'ТЕСТ-XLSX');
+
+  const imported = await api('POST', '/api/import', { form: makeForm() });
+  assert.equal(imported.status, 200);
+  const view = await (await api('GET', '/api/schedule?view=group&id=977')).json();
+  assert.equal(view.lessons.length, 1);
+  assert.equal(view.lessons[0].subject, 'ТЕСТ-XLSX');
+  assert.equal(view.lessons[0].type, 'ПЗ');
+  assert.equal(view.lessons[0].topic, 'Т.4');
 });
 
 test('представление группы и перенос занятия', async () => {

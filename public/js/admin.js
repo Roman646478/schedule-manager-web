@@ -5603,13 +5603,13 @@
   }
 
   /* ----------------------- Импорт ----------------------- */
-  // Собирает выбранные .html-файлы из обычного инпута и из выбранной папки
+  // Собирает выбранные HTML/XLSX-файлы из обычного инпута и выбранной папки
   // (подпапки тоже — браузер отдаёт все файлы дерева).
   function pickedImportFiles() {
     const all = [...$('fileInput').files, ...$('folderInput').files];
     const seen = new Set();
     return all.filter((f) => {
-      if (!/\.html?$/i.test(f.name)) return false;
+      if (!/\.(html?|xlsx)$/i.test(f.name)) return false;
       const key = (f.webkitRelativePath || f.name) + ':' + f.size;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -5619,7 +5619,7 @@
 
   async function doImport() {
     const files = pickedImportFiles();
-    if (!files.length) return toast('Выберите .html-файлы или папку с расписанием', true);
+    if (!files.length) return toast('Выберите .html/.xlsx-файлы или папку с расписанием', true);
     const mode = $('importMerge').checked ? 'merge' : 'replace';
     const fields = { mode };
     // Авто-выравнивание по датам файла (по умолчанию) либо ручной сдвиг.
@@ -5731,10 +5731,28 @@
     }
   }
 
-  // Подсказка о выбранных файлах/папке (число найденных .html).
-  function updateImportPicked() {
+  // Перед записью показываем, что именно сервер нашёл в каждом файле.
+  async function updateImportPicked() {
     const n = pickedImportFiles().length;
-    $('importStatus').textContent = n ? `Выбрано .html-файлов: ${n}` : '';
+    $('importStatus').textContent = n ? `Выбрано файлов: ${n} · определяю структуру…` : '';
+    $('importPreview').textContent = '';
+    if (!n) return;
+    try {
+      const { files } = await api.upload('/api/import/preview', pickedImportFiles(), {});
+      const format = { html: 'HTML', 'single-cell': 'Excel: пара в одной ячейке', 'three-rows': 'Excel: три строки на пару' };
+      $('importPreview').innerHTML = files.map((f) => {
+        const examples = (f.examples || []).map((x) => esc(
+          `${x.day}, нед. ${x.weekNo}, пара ${x.pairNo}: ${[x.type, x.topic, x.subject, x.room].filter(Boolean).join(' · ')}`
+        )).join('<br>');
+        return `<div><b>${esc(f.name)}</b>: ${esc(format[f.format] || f.format)}, группа ${esc(f.owner || '?')}, ` +
+          `сетка со строки ${f.gridRow || '—'}, недель ${f.weeks}, записей ${f.lessons}` +
+          `${f.firstDate ? `, первая дата ${esc(f.firstDate)}` : ', ⚠ дата не найдена'}` +
+          `${examples ? `<br><span>Проверьте примеры:<br>${examples}</span>` : ''}</div>`;
+      }).join('<hr>');
+      $('importStatus').textContent = `Выбрано файлов: ${n} · проверьте распознавание ниже`;
+    } catch (err) {
+      $('importStatus').textContent = `Не удалось распознать: ${err.message}`;
+    }
   }
 
   /* ----------------------- Полная очистка ----------------------- */
