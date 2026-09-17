@@ -97,6 +97,12 @@
     return Math.max(maxData, 26);
   }
 
+  const currentWeek = () => SC.weekNoOn(
+    (state.semester || {}).start,
+    new Date(),
+    semesterWeeks()
+  ) || 1;
+
   document.addEventListener('DOMContentLoaded', init);
 
   async function init() {
@@ -123,6 +129,7 @@
     const savedView = readView();
     if (savedView) restoreView(savedView);
     await loadSemester();
+    state.week = currentWeek();
     fillWeeks();
     // Недель в семестре могло стать меньше — тогда возвращаемся на первую.
     $('weekSelect').value = String(state.week);
@@ -240,8 +247,12 @@
       }
     });
     document.querySelectorAll('[data-mode]').forEach((b) => {
-      b.onclick = () => {
+      b.onclick = (event) => {
         exitBlockMode();
+        if (event.isTrusted && (b.dataset.mode === 'week' || b.dataset.mode === 'summary')) {
+          state.week = currentWeek();
+          $('weekSelect').value = String(state.week);
+        }
         applyMode(b.dataset.mode);
         render();
       };

@@ -66,7 +66,7 @@ test.before(async () => {
   await admin('PUT', '/api/semester', { name: 'осень', start: '2026-09-01', end: '2027-01-31' });
   lessonId = (await (await admin('POST', '/api/lessons', {
     day: 'Пн', pairNo: 1, weekNo: 1, subject: 'ТЕСТ', type: 'ПЗ',
-    groups: ['999-11'], teacher: 'Иванов И.И.', topic: 'Т.1',
+    groups: ['999-11'], teacher: 'Иванов И.И.', topic: 'Т.1', room: 'А-101',
   })).json()).id;
 });
 
@@ -77,6 +77,7 @@ test.after(async () => {
 });
 
 test('тумблер выключен по умолчанию, гостю выгрузка запрещена', async () => {
+  assert.equal((await guest('POST', '/api/export/guest-view', { kind: 'room', id: 'А-101', weeks: [1] })).status, 403);
   assert.equal((await (await guest('GET', '/api/guest-export')).json()).enabled, false);
   assert.equal((await guest('POST', '/api/export/group', { group: '999-11' })).status, 403);
   assert.equal((await guest('POST', '/api/export/teacher', { teacher: 'Иванов И.И.' })).status, 403);
@@ -165,6 +166,30 @@ test('сводное гостю: список групп сужает файл, 
 test('остальные выгрузки гостю закрыты и с включённым тумблером', async () => {
   assert.equal((await guest('POST', '/api/export/groups', {})).status, 401);
   assert.equal((await guest('POST', '/api/export/summary', {})).status, 401);
+});
+
+test('аудитория и кафедра: Excel содержит только опубликованные занятия выбранных недель', async () => {
+  const ExcelJS = require('exceljs');
+  await admin('PUT', '/api/rooms', { name: 'А-101', dept: '81', capacity: 30 });
+  await admin('POST', '/api/publish');
+  await admin('PUT', `/api/lesson/${lessonId}`, { note: 'НЕ ОПУБЛИКОВАНО' });
+  for (const target of [
+    { kind: 'room', id: 'А-101' },
+    { kind: 'dept', id: '81', deptKind: 'room' },
+    { kind: 'dept', id: '(без кафедры)', deptKind: 'teacher' },
+  ]) {
+    const res = await guest('POST', '/api/export/guest-view', { ...target, weeks: [1, 2] });
+    assert.equal(res.status, 200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await res.arrayBuffer()));
+    assert.deepEqual(wb.worksheets.map((ws) => ws.name), ['Неделя 1', 'Неделя 2']);
+    const textOf = (ws) => JSON.stringify(ws.getSheetValues());
+    assert.match(textOf(wb.worksheets[0]), /ТЕСТ/);
+    assert.doesNotMatch(textOf(wb.worksheets[0]), /НЕ ОПУБЛИКОВАНО/);
+    assert.doesNotMatch(textOf(wb.worksheets[1]), /ТЕСТ/);
+  }
+  assert.equal((await guest('POST', '/api/export/guest-view', { kind: 'room', id: 'А-101', weeks: [0] })).status, 400);
+  assert.equal((await guest('POST', '/api/export/guest-view', { kind: 'room', id: 'нет', weeks: [1] })).status, 404);
 });
 
 // Гость видит опубликованный снимок — и Excel у него такой же, а перенос после

@@ -172,10 +172,14 @@
       render();
     };
     $('deptKind').onchange = (e) => { state.deptKind = e.target.value; fillEntities(); render(); };
-    $('entitySelect').onchange = (e) => { state.entityId = e.target.value; render(); };
+    $('entitySelect').onchange = (e) => {
+      state.entityId = e.target.value;
+      state.subjGroups = null;
+      render();
+    };
     $('weekSelect').onchange = (e) => { state.week = Number(e.target.value); render(); };
     document.querySelectorAll('[data-mode]').forEach((b) => {
-      b.onclick = () => {
+      b.onclick = (event) => {
         document.querySelectorAll('[data-mode]').forEach((x) => x.classList.remove('active'));
         b.classList.add('active');
         state.mode = b.dataset.mode;
@@ -183,8 +187,11 @@
         // текущий день, а не тот, где человек остановился неделю назад.
         if (state.mode === 'day') {
           state.day = todayDay();
-          const w = SC.weekNoOn((state.db.semester || {}).start, new Date());
-          if (w) { state.week = w; $('weekSelect').value = String(w); }
+          state.week = currentWeek();
+          $('weekSelect').value = String(state.week);
+        } else if (event.isTrusted && ['week', 'month', 'summary'].includes(state.mode)) {
+          state.week = currentWeek();
+          $('weekSelect').value = String(state.week);
         }
         // Сводный вид — за неделю (выбор недели нужен), но без выбора группы/преподавателя.
         $('weekSelect').disabled = state.mode === 'semester';
@@ -253,9 +260,7 @@
     const dk = Q.get('dk');
     if (dk === 'teacher' || dk === 'room') { state.deptKind = dk; $('deptKind').value = dk; }
     const raw = Q.get('week');
-    const want = raw === 'cur'
-      ? SC.weekNoOn((state.db.semester || {}).start, new Date())
-      : Number(raw);
+    const want = raw == null || raw === 'cur' ? currentWeek() : Number(raw);
     if (want) state.week = Math.min(semesterWeeks(), Math.max(1, want));
     $('weekSelect').value = String(state.week);
     // Вкладку режима жмём кликом: у обработчика уже есть вся обвязка
@@ -683,6 +688,7 @@
     const next = Math.min(opts.length - 1, Math.max(0, idx + delta));
     if (next === idx) return;
     state.entityId = opts[next].value;
+    state.subjGroups = null;
     sel.value = state.entityId;
     render();
   }
@@ -702,6 +708,13 @@
     const maxData = (state.db && state.db.lessons || []).reduce((m, l) => Math.max(m, l.weekNo || 0), 0);
     return Math.max(maxData, 26);
   }
+
+  // Начальная позиция следует локальной календарной дате устройства посетителя.
+  const currentWeek = () => SC.weekNoOn(
+    (state.db && state.db.semester || {}).start,
+    new Date(),
+    semesterWeeks()
+  ) || 1;
 
   function stepWeek(delta) {
     const next = Math.min(semesterWeeks(), Math.max(1, Number(state.week) + delta));
@@ -733,10 +746,9 @@
     return all.filter((l) => roomsOf(l).includes(state.entityId));
   }
 
-  // Кнопка выгрузки: в сводном виде — за открытую неделю, иначе — только для
-  // группы, преподавателя и дисциплины и только когда объект выбран.
+  // Выгрузка доступна во всех видах; вне сводного нужен выбранный объект.
   function syncExportBtn() {
-    const kindOk = state.kind === 'group' || state.kind === 'teacher' || state.kind === 'subject';
+    const kindOk = ['group', 'teacher', 'subject', 'room', 'dept'].includes(state.kind);
     $('btnGuestExport').hidden = !state.canExport || (!isSummary() && (!kindOk || !state.entityId));
   }
 
@@ -746,6 +758,14 @@
     if (isSummary()) return ['/api/export/weekly', { weekNo: state.week, groups: summaryGroups() }];
     if (state.kind === 'group') return ['/api/export/group', { group: state.entityId }];
     if (state.kind === 'teacher') return ['/api/export/teacher', { teacher: state.entityId }];
+    if (state.kind === 'room' || state.kind === 'dept') {
+      const weeks = state.kind === 'dept' || state.mode === 'week'
+        ? [state.week]
+        : weekWindow(maxWeekOf(lessonsFor()));
+      return ['/api/export/guest-view', {
+        kind: state.kind, id: state.entityId, deptKind: state.deptKind, weeks,
+      }];
+    }
     return ['/api/export/subject', { subject: state.entityId, groups: [...(state.subjGroups || [])] }];
   }
 

@@ -7,6 +7,7 @@ const { getSetting } = require('../services/settingsService');
 const { readSnapshot } = require('../services/scheduleService');
 const { exportWeeklySchedule, exportSemesterSummary } = require('../services/weeklyExportService');
 const { exportGroupSchedule, exportAllGroups, exportTeacherSchedule, exportSubjectSchedule, subjectGroups } = require('../services/groupExportService');
+const { exportGuestView } = require('../services/guestViewExportService');
 
 // Файл уходит в браузер: сохраняет его пользователь у себя, сервер ничего не пишет
 // на диск. Имя файла express кодирует сам (filename* для кириллицы), а что не
@@ -121,6 +122,25 @@ router.post('/export/teacher', allowGuestExport, async (req, res, next) => {
 router.post('/export/groups', requireAuth, async (req, res, next) => {
   try {
     sendFile(res, await exportAllGroups());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Дополнительные виды гостевой страницы всегда используют опубликованные данные,
+// в том числе если страницу открыл вошедший администратор.
+router.post('/export/guest-view', allowGuestExport, async (req, res, next) => {
+  try {
+    const { kind, id, deptKind, weeks } = req.body || {};
+    if (!['room', 'dept'].includes(kind) || typeof id !== 'string' || !id.trim() ||
+        (kind === 'dept' && !['room', 'teacher'].includes(deptKind)) ||
+        !Array.isArray(weeks) || !weeks.length || weeks.length > 104 ||
+        weeks.some((week) => !Number.isInteger(week) || week < 1 || week > 104)) {
+      return res.status(400).json({ error: 'Укажите вид расписания, объект и корректные недели' });
+    }
+    const snapshot = readSnapshot();
+    if (!snapshot) return res.status(404).json({ error: 'Расписание ещё не опубликовано' });
+    sendFile(res, await exportGuestView(snapshot, { kind, id, deptKind, weeks: [...new Set(weeks)].sort((a, b) => a - b) }));
   } catch (err) {
     next(err);
   }

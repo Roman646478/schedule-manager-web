@@ -82,12 +82,69 @@ test('неверный пароль оставляет пользователя 
   await expect(page.locator('#msg')).not.toBeEmpty();
 });
 
+test('гость повторно скачивает разные дисциплины и новые виды Excel', async ({ page, browser }) => {
+  test.setTimeout(60_000);
+  await login(page);
+  await page.evaluate(async () => {
+    for (const [subject, group, room, pairNo] of [
+      ['ЭКСПОРТ-А', 'Э-101', 'Э-1', 1], ['ЭКСПОРТ-Б', 'Э-202', 'Э-2', 2],
+    ]) {
+      await window.api.post('/api/lessons', {
+        day: 'Вт', pairNo, weekNo: 1, subject, type: 'ПЗ', groups: [group], room,
+        teacher: 'Экспорт Т.Т.',
+      });
+      await window.api.put('/api/rooms', { name: room, dept: 'ЭКСПОРТ', capacity: 30 });
+    }
+    await window.api.put('/api/guest-export', { enabled: true });
+    await window.api.post('/api/publish');
+  });
+  const guest = await browser.newPage({ acceptDownloads: true });
+  try {
+    await guest.goto('/weekly.html');
+    await guest.locator('#viewKind').selectOption('subject');
+    const download = async (expectedName) => {
+      await expect(guest.locator('#btnGuestExport')).toBeEnabled();
+      const pending = guest.waitForEvent('download');
+      await guest.locator('#btnGuestExport').click();
+      const file = await pending;
+      expect(file.suggestedFilename()).toContain(expectedName);
+      expect(await file.failure()).toBeNull();
+    };
+    for (const subject of ['ЭКСПОРТ-А', 'ЭКСПОРТ-Б', 'ЭКСПОРТ-А']) {
+      await guest.locator('#entitySelect').selectOption(subject);
+      await download(subject);
+    }
+    await guest.locator('#viewKind').selectOption('room');
+    await guest.locator('#entitySelect').selectOption('Э-1');
+    await download('Аудитория Э-1');
+    await guest.locator('#viewKind').selectOption('dept');
+    await guest.locator('#entitySelect').selectOption('(без кафедры)');
+    await download('Кафедра');
+    await guest.locator('#deptKind').selectOption('room');
+    await guest.locator('#entitySelect').selectOption('ЭКСПОРТ');
+    await download('Кафедра ЭКСПОРТ');
+  } finally {
+    await guest.close();
+  }
+});
+
 test('гостевой экран и печатный режим загружаются', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
   await page.goto('/weekly.html');
   await expect(page.locator('#guestRoot')).toBeVisible();
+  const snapshot = await (await page.request.get('/public_db.json')).json();
+  const weekCount = await page.locator('#weekSelect option').count();
+  const localWeek = await page.evaluate(
+    ({ start, maxWeek }) => window.SCHED_CONST.weekNoOn(start, new Date(), maxWeek),
+    { start: snapshot.semester?.start, maxWeek: weekCount }
+  );
+  expect(Number(await page.locator('#weekSelect').inputValue())).toBe(localWeek || 1);
+  await page.locator('[data-mode="month"]').click();
+  expect(Number(await page.locator('#weekSelect').inputValue())).toBe(localWeek || 1);
+  await page.locator('[data-mode="day"]').click();
+  expect(Number(await page.locator('#weekSelect').inputValue())).toBe(localWeek || 1);
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('#guestRoot')).toBeVisible();
   expect(errors).toEqual([]);
