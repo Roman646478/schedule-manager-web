@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { randomUUID } = require('crypto');
 const { writeSnapshot, readSnapshot } = require('./snapshotStore');
 const { sortTopics } = require('./topicOrderService');
 
@@ -1131,6 +1132,7 @@ function publish(db = getDb()) {
   sortTopics();
   const lessons = loadLessons(db).filter((l) => !l.parked);
   const snapshot = {
+    publicationId: randomUUID(),
     publishedAt: new Date().toISOString(),
     lessons,
     semester: getSemester(db),
@@ -1166,7 +1168,7 @@ function publish(db = getDb()) {
 // меняется, поэтому проверки накладок не затрагиваются. Помимо базы патчим и сам
 // снимок: гостевая страница читает public_db.json, иначе правка «пропала бы» до
 // перепубликации.
-function guestEditLesson(lessonId, fields, db = getDb()) {
+function guestEditLesson(lessonId, fields, expectedPublicationId, db = getDb()) {
   // Пустое поле — это NULL, а не пустая строка: editLesson бережёт note как есть,
   // и без нормализации очищенное примечание разошлось бы со снимком.
   const patch = {};
@@ -1187,6 +1189,9 @@ function guestEditLesson(lessonId, fields, db = getDb()) {
   if (!Object.keys(patch).length) return { ok: false, code: 400, reasons: ['Менять можно только тему, вид занятия и примечание'] };
 
   const snap = readSnapshot();
+  if (!expectedPublicationId || snap?.publicationId !== expectedPublicationId) {
+    return { ok: false, code: 409, stale: true, reasons: ['Опубликованное расписание изменилось. Обновите страницу.'] };
+  }
   if (!snap || !(snap.lessons || []).some(l => l.id === lessonId)) return { ok: false, code: 409, reasons: ['Занятие отсутствует в публикации. Обновите страницу.'] };
   return transaction(() => {
     const result = editLesson(lessonId, patch);

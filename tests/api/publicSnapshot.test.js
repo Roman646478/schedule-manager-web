@@ -127,7 +127,11 @@ test('статус публикации — только админу', async ()
 
 test('правка гостя патчит и сжатую копию снимка', async () => {
   assert.equal((await admin('PUT', '/api/guest-edit', { enabled: true })).status, 200);
-  assert.equal((await guest('PUT', `/api/guest/lesson/${lessonId}`, { topic: 'Т.7' })).status, 200);
+  const current = JSON.parse(fs.readFileSync(process.env.PUBLIC_DB_PATH, 'utf8'));
+  assert.equal((await guest('PUT', `/api/guest/lesson/${lessonId}`, {
+    topic: 'Т.7',
+    publicationId: current.publicationId,
+  })).status, 200);
   const zipped = await rawGet('/public_db.json', 'gzip');
   assert.equal(zipped.headers['content-encoding'], 'gzip');
   const snap = JSON.parse(require('node:zlib').gunzipSync(zipped.body).toString('utf8'));

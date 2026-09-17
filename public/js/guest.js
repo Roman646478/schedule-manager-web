@@ -1274,7 +1274,10 @@
       editable: state.canEdit
         ? { 7: { field: 'type', options: (state.db && state.db.practicalTypes) || [] }, 8: 'topic', 12: 'note' }
         : {},
-      save: (id, field, value) => api.put(`/api/guest/lesson/${id}`, { [field]: value }),
+      save: (id, field, value) => api.put(`/api/guest/lesson/${id}`, {
+        [field]: value,
+        publicationId: state.db.publicationId,
+      }),
       onSaved: () => {
         const sum = $('grid').querySelector('.sem-summary');
         if (sum) sum.outerHTML = teacherSummary(lessonsFor());
@@ -1503,7 +1506,10 @@
     const before = l[field] || '';
     if (value === before) return;
     try {
-      await api.put(`/api/guest/lesson/${l.id}`, { [field]: value || null });
+      await api.put(`/api/guest/lesson/${l.id}`, {
+        [field]: value || null,
+        publicationId: state.db.publicationId,
+      });
       l[field] = value || null;
       toast('Сохранено');
       render();

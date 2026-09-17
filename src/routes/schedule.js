@@ -1126,8 +1126,8 @@ router.put('/move-marks', requireAuth, (req, res, next) => {
 router.put('/guest/lesson/:id', (req, res, next) => {
   try {
     if (!guestEditOn()) return res.status(403).json({ error: 'Правка расписания сейчас закрыта' });
-    const { topic, note, type } = req.body || {};
-    const result = guestEditLesson(Number(req.params.id), { topic, note, type });
+    const { topic, note, type, publicationId } = req.body || {};
+    const result = guestEditLesson(Number(req.params.id), { topic, note, type }, publicationId);
     if (!result.ok) return res.status(result.code || 409).json(result);
     res.json({ success: true });
   } catch (err) {

@@ -23,6 +23,7 @@ const { closeDb } = require('../../src/config/database');
 
 let server;
 let base;
+let publicationId;
 
 // Две независимые «сессии»: админ и гость (у гостя своя кука и свой CSRF).
 function client() {
@@ -39,6 +40,9 @@ function client() {
     return st.csrf;
   };
   return async function api(method, urlPath, body) {
+    if (method === 'PUT' && urlPath.startsWith('/api/guest/lesson/') && body && body.publicationId === undefined) {
+      body = { ...body, publicationId };
+    }
     const headers = {};
     if (method !== 'GET') headers['x-csrf-token'] = await ensureCsrf();
     if (st.cookie) headers.cookie = st.cookie;
@@ -69,6 +73,7 @@ test.before(async () => {
   });
   lessonId = (await res.json()).id;
   await admin('POST', '/api/publish');
+  publicationId = JSON.parse(fs.readFileSync(process.env.PUBLIC_DB_PATH, 'utf8')).publicationId;
 });
 
 test.after(async () => {
@@ -88,6 +93,23 @@ test('тумблер переключает только админ', async () =
   assert.equal((await guest('PUT', '/api/guest-edit', { enabled: true })).status, 401);
   assert.equal((await admin('PUT', '/api/guest-edit', { enabled: true })).status, 200);
   assert.equal((await (await guest('GET', '/api/guest-edit')).json()).enabled, true);
+});
+
+test('страница старой публикации не может изменить занятие после перепубликации', async () => {
+  const stalePublicationId = publicationId;
+  assert.equal((await admin('POST', '/api/publish')).status, 200);
+  publicationId = JSON.parse(fs.readFileSync(process.env.PUBLIC_DB_PATH, 'utf8')).publicationId;
+  assert.notEqual(publicationId, stalePublicationId);
+
+  const res = await guest('PUT', `/api/guest/lesson/${lessonId}`, {
+    topic: 'правка со старой страницы',
+    publicationId: stalePublicationId,
+  });
+  assert.equal(res.status, 409);
+  assert.equal((await res.json()).stale, true);
+
+  const lessons = (await (await admin('GET', '/api/schedule?view=teacher&id=Иванов И.И.')).json()).lessons;
+  assert.notEqual(lessons.find((x) => x.id === lessonId).topic, 'правка со старой страницы');
 });
 
 test('при включённом тумблере гость правит тему и примечание — и в базе, и в снимке', async () => {
