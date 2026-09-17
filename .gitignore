@@ -1,0 +1,49 @@
+node_modules/
+data/
+*.log
+
+# Собранный виджет (scripts/build-widget-exe.ps1) — двоичный, собирается заново
+dist/
+.env
+.DS_Store
+
+# Снимок для гостевого просмотра — генерируется публикацией
+public/public_db.json
+public/public_db.json.gz
+public/public_db.json.*
+test-results/
+playwright-report/
+
+# Реальные входные данные и рабочие документы не публикуются с исходным кодом.
+примеры/
+Учебные планы/
+Расписание группы/*
+!Расписание группы/Образец группа.xlsx
+Еженедельное расписание/*
+!Еженедельное расписание/Образец.xlsx
+
+# Локальные служебные каталоги других помощников.
+.claude/
+.fablize/
+claude-memory-compiler/
+.claude-rules.md
+CLAUDE.md
+rules/
+
+# Локальные диагностические артефакты, не используемые приложением.
+50
+band.png
+
+# Офлайн-установщик Microsoft больше лимита GitHub (100 МБ). Он опционален:
+# локальная сборка включает имеющуюся копию, а исходный репозиторий — нет.
+vendor/webview2-runtime/MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+
+# Временные файлы SQLite вне стандартной data/.
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Вспомогательный инструмент памяти Claude — не часть сайта
+claude-memory-compiler/.venv/
+claude-memory-compiler/__pycache__/

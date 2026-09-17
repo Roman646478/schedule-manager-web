@@ -1,0 +1,161 @@
+/* ============================================================
+   ДИЗАЙН-СИСТЕМА ПРОЕКТА (единые токены) — см. .claude-rules.md §3
+   Подключается ПЕРВОЙ, раньше styles.css.
+   Запрещено хардкодить hex/rgb в компонентах — только эти переменные.
+   ============================================================ */
+
+/* Локальные шрифты — скачаны для офлайн-работы (см. /public/fonts/) */
+@import url('/fonts/fonts.css');
+
+:root {
+  --card: #ffffff;
+  --ring: #e05d38;
+  --input: #f4f5f7;
+  --muted: #f9fafb;
+  --accent: #d6e4f0;
+  --border: #dcdfe2;
+  --radius: 0.75rem;
+  --chart-1: #86a7c8;
+  --chart-2: #eea591;
+  --chart-3: #5a7ca6;
+  --chart-4: #466494;
+  --chart-5: #334c82;
+  --popover: #ffffff;
+  --primary: #e05d38;
+  --sidebar: #dddfe2;
+  --font-mono: JetBrains Mono, monospace;
+  --font-sans: Inter, sans-serif;
+  --secondary: #f3f4f6;
+  --background: #e8ebed;
+  --font-serif: Source Serif 4, serif;
+  --foreground: #333333;
+  --destructive: #ef4444;
+  --success: #16a34a;
+  --warning: #d97706;
+  --shadow-blur: 3px;
+  --shadow-color: hsl(0 0% 0%);
+  --sidebar-ring: #e05d38;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0.1;
+  --sidebar-accent: #d6e4f0;
+  --sidebar-border: #e5e7eb;
+  --card-foreground: #333333;
+  --shadow-offset-x: 0px;
+  --shadow-offset-y: 1px;
+  --sidebar-primary: #e05d38;
+  --muted-foreground: #6b7280;
+  --accent-foreground: #1e3a8a;
+  --popover-foreground: #333333;
+  --primary-foreground: #ffffff;
+  --sidebar-foreground: #333333;
+  --secondary-foreground: #4b5563;
+  --destructive-foreground: #ffffff;
+  --sidebar-accent-foreground: #1e3a8a;
+  --sidebar-primary-foreground: #ffffff;
+}
+
+.dark {
+  --card: #2a3040;
+  --ring: #e05d38;
+  --input: #3d4354;
+  --muted: #2a303e;
+  --accent: #2a3656;
+  --border: #3d4354;
+  --chart-1: #86a7c8;
+  --chart-2: #e6a08f;
+  --chart-3: #5a7ca6;
+  --chart-4: #466494;
+  --chart-5: #334c82;
+  --popover: #262b38;
+  --primary: #e05d38;
+  --sidebar: #2a303f;
+  --secondary: #2a303e;
+  --background: #1c2433;
+  --foreground: #e5e5e5;
+  --destructive: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --sidebar-ring: #e05d38;
+  --sidebar-accent: #2a3656;
+  --sidebar-border: #3d4354;
+  --card-foreground: #e5e5e5;
+  --sidebar-primary: #e05d38;
+  --muted-foreground: #a3a3a3;
+  --accent-foreground: #bfdbfe;
+  --popover-foreground: #e5e5e5;
+  --primary-foreground: #ffffff;
+  --sidebar-foreground: #e5e5e5;
+  --secondary-foreground: #e5e5e5;
+  --destructive-foreground: #ffffff;
+  --sidebar-accent-foreground: #bfdbfe;
+  --sidebar-primary-foreground: #ffffff;
+}
+
+/* Производные токены, собранные ТОЛЬКО из переменных выше (без новых hex). */
+:root {
+  --shadow-sm: var(--shadow-offset-x) var(--shadow-offset-y) var(--shadow-blur) var(--shadow-spread)
+    color-mix(in srgb, var(--shadow-color) calc(var(--shadow-opacity) * 100%), transparent);
+  --shadow-md: 0 8px 24px var(--shadow-spread)
+    color-mix(in srgb, var(--shadow-color) calc(var(--shadow-opacity) * 180%), transparent);
+
+  /* ---- Единая база подсветки/выделения ячеек сетки расписания ----
+     var() резолвится в месте применения, поэтому color-mix берёт --card/--primary
+     текущей темы — токены работают и в светлой, и в тёмной без дублирования.
+     Проценты подобраны так, чтобы заливка читалась на БЕЛОМ фоне (светлая тема). */
+
+  /* Заливки состояний ячейки (td.slot). Каждая собрана из «своей» линии-обводки
+     (список ниже) — поэтому настройка цвета состояния меняет и обводку, и заливку
+     разом: одно значение на одно состояние (окно «Оформление»). */
+  --cell-target-bg: color-mix(in srgb, var(--grid-line-free) 30%, var(--card));     /* цель переноса: слот и аудитория свободны */
+  --cell-target-busy-bg: color-mix(in srgb, var(--grid-line-warn) 34%, var(--card)); /* цель переноса: слот свободен, аудитория занята */
+  --cell-active-bg: color-mix(in srgb, var(--grid-line) 45%, var(--card));     /* активное перетаскивание (drag-over) */
+  --cell-busy-bg:   color-mix(in srgb, var(--grid-line-error) 30%, var(--card)); /* нет места при расстановке СР */
+  --cell-holiday-head-bg: color-mix(in srgb, var(--grid-line-holiday) 16%, var(--secondary));
+  --cell-holiday-bg:      color-mix(in srgb, var(--grid-line-holiday) 8%, var(--card));
+
+  /* Заливки состояний занятия (.lesson) */
+  --lesson-sel-bg:    color-mix(in srgb, var(--hl-color) 30%, var(--card));   /* выделено по ауд./дисциплине */
+  --lesson-stream-bg: color-mix(in srgb, var(--grid-line-stream) 32%, var(--card));   /* потоковое */
+  --lesson-zachet-bg: color-mix(in srgb, var(--chart-1) 36%, var(--card));   /* зачёт */
+  --lesson-exam-bg:   color-mix(in srgb, var(--chart-2) 48%, var(--card));   /* экзамен */
+  --lesson-warn-bg:   color-mix(in srgb, var(--destructive) 16%, var(--card)); /* нет преподавателя */
+
+  /* Постоянная окраска занятий ПО ВИДУ (Л, ПЗ, ЛР…): база — насыщенный цвет,
+     заливка — он же, разбавленный фоном карточки, поэтому работает в обеих темах.
+     Формы контроля (зачёт/экзамен) и «перенесено» перекрывают вид: у них свой
+     смысл, см. порядок правил в styles.css. */
+  --type-lec:  #4f7fd0; /* лекция */
+  --type-prac: #2e9e57; /* практическое занятие */
+  --type-lab:  #8a5cd0; /* лабораторная работа */
+  --type-sem:  #d59a1f; /* семинар */
+  --type-grp:  #17a2a2; /* групповое занятие/упражнение */
+  --type-ctrl: #cc5b8e; /* контрольная/курсовая работа */
+
+  --lesson-lec-bg:  color-mix(in srgb, var(--type-lec) 26%, var(--card));
+  --lesson-prac-bg: color-mix(in srgb, var(--type-prac) 24%, var(--card));
+  --lesson-lab-bg:  color-mix(in srgb, var(--type-lab) 24%, var(--card));
+  --lesson-sem-bg:  color-mix(in srgb, var(--type-sem) 28%, var(--card));
+  --lesson-grp-bg:  color-mix(in srgb, var(--type-grp) 24%, var(--card));
+  --lesson-ctrl-bg: color-mix(in srgb, var(--type-ctrl) 26%, var(--card));
+
+  /* Линии-обводки: насыщенные токены, видны в обеих темах. Это же — точки
+     настройки цветов сетки (окно «Оформление» переопределяет их на :root). */
+  --grid-line:         var(--primary);      /* ячейка под курсором при переносе */
+  --grid-line-free:    var(--success);      /* свободная цель переноса */
+  --grid-line-warn:    var(--warning);      /* аудитория занята — предупреждение */
+  --grid-line-error:   var(--destructive);  /* ошибка / не хватило аудитории */
+  --grid-line-stream:  var(--chart-1);      /* потоковое занятие */
+  --grid-line-holiday: var(--destructive);  /* нерабочий день */
+  --grid-line-teacher: var(--chart-3);      /* подсказка «пары преподавателя в одной аудитории» */
+  --grid-line-dept:    var(--success);      /* подсказка «аудитория своей кафедры» */
+  --grid-line-cc:      var(--type-lab);     /* подсказка «занятие — в компьютерный класс» */
+  --grid-line-ctrl:    var(--type-ctrl);    /* подсказка «формы контроля подряд — в одной аудитории» */
+  --hl-color:          var(--primary);      /* выделение в сетке по параметру */
+  --hl-color-2:        #2f7ad6;             /* второй параметр в режиме «Любое из двух» */
+  --hl-color-both:     #8a5cd0;             /* совпало по обоим параметрам */
+
+  /* Размеры сетки расписания (окно «Оформление») */
+  --grid-row-h:  104px; /* высота строки-пары (пять строк карточки при шрифте 12px) */
+  --grid-font:    12px; /* размер шрифта в карточке занятия */
+  --grid-time-w: 110px; /* ширина столбца времени */
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Журнал переносов — Менеджер расписания</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/print.css" media="print">
+  <script src="/js/theme.js"></script>
+  <script src="/js/shared-constants.js"></script>
+  <script src="/js/api.js" defer></script>
+  <script src="/js/log.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">Р</span> Менеджер расписания</div>
+    <div class="topbar-actions">
+      <button class="btn secondary icon" data-theme-toggle aria-label="Тема">🌙</button>
+      <a class="btn secondary sm" href="/admin.html">← К расписанию</a>
+      <button class="btn secondary sm" id="btnLogout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="log-page">
+    <div class="log-head">
+      <h1>Журнал переносов занятий</h1>
+      <div class="log-tools">
+        <input type="search" id="logSearch" class="log-search" placeholder="Поиск: группа, дисциплина, тема…">
+        <span class="log-count" id="logCount"></span>
+        <button class="btn secondary sm" id="btnResetFilters" style="display:none">Сбросить фильтры</button>
+        <button class="btn danger sm" id="btnClearLog">Очистить журнал</button>
+      </div>
+    </div>
+
+    <div class="log-scroll">
+      <table class="log-table">
+        <colgroup id="logCols"></colgroup>
+        <thead id="logHead"></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+    <div class="log-empty" id="logEmpty" style="display:none">Переносов пока не было.</div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+</body>
+</html>

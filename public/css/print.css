@@ -1,0 +1,220 @@
+/* ============================================================
+   Печать. На лист уходит только содержимое документа: сетка расписания и
+   подвал с дисциплинами и преподавателями. Управление интерфейсом — панели,
+   кнопки, подсказки, служебные сводки — а также легенда обозначений видов
+   занятий не печатаются.
+
+   Всё умещается в ОДИН вертикальный лист A4. Ширину задаёт --print-zoom,
+   а высоту заполняют два подбираемых значения:
+     --print-grid-font — размер текста в ячейках (максимальный, при
+                         котором содержимое ещё влезает в лист);
+     --print-row-h     — высота строки сетки (остаток высоты
+                         распределяется по строкам).
+   Все три считает public/js/print.js.
+
+   Файл подключается ДВАЖДЫ: media="print" — рабочая копия, и
+   media="not all" (#printPreviewCss) — её на миг включает print.js,
+   чтобы померить содержимое уже в печатной раскладке.
+   Цвета — только через токены theme.css (см. .claude-rules.md §3).
+   ============================================================ */
+
+@page {
+  size: A4 portrait;
+  margin: 8mm;
+}
+
+/* Всё, что относится к управлению, а не к документу. */
+.topbar,
+.sidebar,
+.buffer,
+.view-modes,
+.sem-summary,
+.subjects-hint,
+.errors-panel,
+.modal-backdrop,
+#disciplineStatsWrap,
+.print-hide {
+  display: none !important;
+}
+
+/* «Обозначения видов занятий» на распечатке не нужны — коды и так известны,
+   а место лучше отдать сетке. */
+.legend-footer {
+  display: none !important;
+}
+
+/* Лист белый: var(--background) светло-серый и печатался бы сплошной заливкой. */
+body {
+  background: #fff;
+}
+
+.admin-layout {
+  display: block;
+  min-height: 0;
+}
+
+/* zoom (а не transform) — он меняет размер блока в потоке, поэтому лишняя
+   пустая страница за уменьшенным содержимым не появляется. */
+/* padding справа — не отступ ради красоты: у таблицы border-collapse: collapse,
+   и внешняя рамка последнего столбца наполовину выходит за её границу. Когда
+   таблица упирается в край печатной полосы, эта половина обрезается и правая
+   граница сетки пропадает. Два пикселя запаса её возвращают. */
+.main {
+  padding: 0 2px 0 0;
+  overflow: visible;
+  zoom: var(--print-zoom, 1);
+}
+
+/* Прокрутки на бумаге нет — контейнеры отдают всё содержимое. */
+.grid-scroll,
+#gridWrap {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+/* Заливки. По умолчанию на бумагу не идут: на экране цвет ячейки — подсказка,
+   на распечатке он только съедает тонер, а сетка читается по границам и тексту.
+   Гасим их явно (а не только отсутствием print-color-adjust) — иначе они
+   вернулись бы, стоит поставить в диалоге печати галочку «Фоновая графика».
+   Класс has-hl вешает applyHighlights в admin.js. */
+body:not(.has-hl) table.grid td,
+body:not(.has-hl) table.grid th,
+body:not(.has-hl) .lesson,
+body:not(.has-hl) .holiday-mark {
+  background: none !important;
+  box-shadow: none !important;
+}
+/* Своей рамки у карточки нет: ячейку уже очерчивает граница таблицы, вторая
+   рамка внутри неё — лишняя линия. В ячейке остаётся только текст. */
+body:not(.has-hl) .lesson {
+  border: none;
+  outline: none;
+}
+
+/* Активно выделение в сетке — цвет несёт смысл (что нашли, что приглушено), и
+   его нужно напечатать вопреки настройке браузера «не печатать фон». */
+body.has-hl * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.grid-head {
+  margin-bottom: 3px;
+}
+.grid-head h1 {
+  font-size: 10pt;
+  margin: 0;
+}
+
+/* ---------- Сетка расписания ---------- */
+
+/* Ширина колонок от шрифта не зависит (фиксированная раскладка + width:100%),
+   поэтому увеличение текста уходит целиком в высоту строк — ровно туда, где на
+   книжном листе остаётся свободное место. */
+table.grid {
+  width: 100%;
+  table-layout: fixed;
+  font-size: var(--print-grid-font, 7pt);
+}
+table.grid thead th {
+  font-size: calc(var(--print-grid-font, 7pt) * 0.9);
+  padding: 1px;
+}
+/* «День» шире своего столбца (он под «Пн») — на печати тоже уменьшаем и
+   разрешаем перенос, иначе слово наезжает на «Часы». */
+table.grid.semester thead th.day-col {
+  font-size: calc(var(--print-grid-font, 7pt) * 0.7);
+  padding: 1px 0;
+  overflow-wrap: anywhere;
+}
+table.grid.semester .pair-col {
+  font-size: calc(var(--print-grid-font, 7pt) * 0.85);
+  padding: 1px;
+}
+/* Строка дат: на экране размер задан в px, на печати — доля от шрифта сетки. */
+table.grid.semester .date-cell,
+table.grid.semester .date-label {
+  font-size: calc(var(--print-grid-font, 7pt) * 0.8);
+  padding: 0 1px;
+}
+/* Строки тянутся до --print-row-h: так остаток высоты листа не пропадает. */
+table.grid tbody tr {
+  height: var(--print-row-h, auto);
+}
+/* На экране слот обрезает содержимое (overflow: hidden) — на бумаге обрезать
+   нечего и нельзя: ячейка должна вырасти под увеличенный текст. */
+table.grid.semester td.slot {
+  height: auto;
+  overflow: visible;
+  padding: 1px;
+}
+/* height: 100% с экрана здесь вредит: карточка растягивается на всю ячейку, и
+   высота строки перестаёт зависеть от размера текста — подбор шрифта не даёт
+   ничего. На бумаге карточка должна быть ровно по содержимому. */
+table.grid.semester .lesson {
+  font-size: inherit;
+  line-height: 1.15;
+  padding: 1px 2px;
+  overflow: visible;
+  height: auto;
+}
+/* Три строки карточки на экране заданы в АБСОЛЮТНЫХ px (9px/11px) — из-за этого
+   размер шрифта ячейки на них не действовал и подбор высоты был бесполезен.
+   На печати переводим их в доли от шрифта сетки. */
+table.grid .lesson .l1,
+table.grid .lesson .l3,
+table.grid .lesson .l4 {
+  font-size: 0.8em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+table.grid .lesson .l2 {
+  font-size: 1em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+table.grid th,
+table.grid td,
+table.grid tr,
+.lesson {
+  break-inside: avoid;
+}
+
+/* ---------- Подвал ---------- */
+
+/* Подвал прижат по высоте: мелкий шрифт, минимальные отступы, строки в одну
+   линию. Место, которое он экономит, достаётся сетке. */
+.subjects-block {
+  margin-top: 2mm;
+  break-inside: avoid;
+}
+.subjects-title {
+  font-size: 7pt;
+  margin: 0 0 1mm;
+}
+table.subjects-table {
+  table-layout: fixed;
+  width: 100%;
+  font-size: 6pt;
+}
+table.subjects-table th,
+table.subjects-table td {
+  padding: 0 2px;
+  vertical-align: top;
+}
+table.subjects-table thead th {
+  font-size: 6pt;
+}
+/* Поля ввода на бумаге — обычный текст без рамок и фона. Высоту textarea
+   пересчитывает print.js под печатный шрифт (на экране она подогнана под
+   более крупный, и подвал занимал бы лишнее). */
+table.subjects-table .subj-input {
+  border: none;
+  background: transparent;
+  padding: 0;
+  resize: none;
+  font-size: 6pt;
+  line-height: 1.1;
+  color: var(--foreground);
+  overflow: hidden;
+}

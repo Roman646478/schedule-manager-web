@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Админка — Менеджер расписания</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <!-- Печать. Второй <link> — та же таблица стилей, выключенная: print.js
+       включает её на миг, чтобы померить содержимое в печатной раскладке. -->
+  <link rel="stylesheet" href="/css/print.css" media="print">
+  <link rel="stylesheet" href="/css/print.css" media="not all" id="printPreviewCss">
+  <script src="/js/theme.js"></script>
+  <script src="/js/print.js" defer></script>
+  <script src="/js/shared-constants.js"></script>
+  <script src="/js/api.js" defer></script>
+  <script src="/js/teacher-tables.js" defer></script>
+  <script src="/js/admin.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">Р</span> Менеджер расписания</div>
+    <div class="topbar-actions">
+      <button class="btn secondary icon" data-theme-toggle aria-label="Тема">🌙</button>
+      <a class="btn secondary sm" href="/log.html">Журнал переносов</a>
+      <button class="btn secondary sm" id="btnUndo" disabled title="">↩ Отменить</button>
+      <button class="btn secondary sm" id="btnLogout">Выйти</button>
+    </div>
+  </header>
+
+  <div class="admin-layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <button class="buffer-toggle" id="sidebarToggle" type="button" aria-label="Свернуть панель" title="Свернуть/развернуть">⟨</button>
+      </div>
+      <div>
+        <h2>Представление</h2>
+        <div class="group">
+          <label class="lbl">Тип</label>
+          <select id="viewKind">
+            <option value="group">Группа</option>
+            <option value="teacher">Преподаватель</option>
+            <option value="room">Аудитория</option>
+            <option value="subject">Дисциплина</option>
+          </select>
+          <label class="lbl">Объект</label>
+          <select id="entitySelect"></select>
+          <!-- Только для вида «Дисциплина»: какие учебные группы показывать. -->
+          <div class="pick-drop" id="subjGroupsWrap" hidden>
+            <button class="btn secondary sm block" id="subjGroupsBtn" type="button" aria-expanded="false">Группы: все</button>
+            <div class="pick-list" id="subjGroupsList" hidden></div>
+          </div>
+          <label class="lbl">Учебная неделя</label>
+          <div class="week-nav">
+            <button class="btn secondary sm" id="weekPrev" type="button" aria-label="Предыдущая неделя">◀</button>
+            <select id="weekSelect" disabled></select>
+            <button class="btn secondary sm" id="weekNext" type="button" aria-label="Следующая неделя">▶</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-actions">
+        <details class="sb-cat" open>
+          <summary>Занятия</summary>
+          <div class="group">
+            <button class="btn sm block" id="btnAddLesson" type="button">+ Добавить занятие</button>
+            <div class="btn-pair">
+              <button class="btn secondary sm" id="btnPlaceSR" type="button" title="Заполнить все свободные ячейки занятием СР, подобрав НЕскрытые аудитории по вместимости (группы одного курса объединяются в одну аудиторию)">Расставить СР</button>
+              <button class="btn secondary sm" id="btnRemoveSR" type="button" title="Удалить все занятия СР в выбранной неделе (обратимо кнопкой «Отменить»)">Удалить СР</button>
+            </div>
+            <button class="btn secondary sm block" id="btnSortTopics" type="button" title="Расставить темы по порядку (ВВ → Т.1, Т.2… → ЗАКЛ.) внутри каждой дисциплины группы и по видам занятий. Занятия остаются на местах — меняются только темы. После любой правки это делается автоматически.">🔢 Расставить темы</button>
+            <button class="btn secondary sm block" id="btnRoomPlan" type="button" hidden title="Подобрать аудитории на открытой неделе по отмеченным ниже правилам; предложения показываются таблицей под сеткой">📐 Подобрать аудитории</button>
+            <button class="btn secondary sm block" id="btnRoomPlanCfg" type="button" hidden title="Порядок и включение правил подбора, допуски и списки исключений">⚙ Настройки подбора</button>
+            <button class="btn secondary sm block" id="btnPair4" type="button" hidden title="Найти, куда переставить занятия группы с 4-й пары (часы 7–8): свободные окна в парах 1–3, пн–пт, в пределах ±2 недель от занятия. Предложения показываются таблицей под сеткой">🕓 Разгрузить 4-ю пару</button>
+            <button class="btn secondary sm block" id="btnVacation" type="button" hidden>🏖 Отпуск преподавателя</button>
+            <button class="btn secondary sm block" id="btnDecommission" type="button" hidden title="Вывести аудиторию из эксплуатации на срок: занятия периода переселяются в свободные аудитории">🛠 Вывод аудитории</button>
+            <button class="btn danger sm block" id="btnClearHiddenGroups" type="button" hidden title="Удалить из расписания преподавателя все занятия, где ВСЕ группы скрыты (не входят в перечень отображаемых)">🧹 Удалить занятия скрытых групп</button>
+            <button class="btn secondary sm block" id="btnBlockCells" type="button" hidden title="Подсветить все свободные ячейки в расписании преподавателя и вручную заблокировать любые из них — ставить занятия туда станет нельзя">🔒 Заблокировать ячейки</button>
+            <button class="btn danger sm block" id="btnDeleteEntity" type="button" hidden>Удалить расписание</button>
+          </div>
+        </details>
+
+        <details class="sb-cat" open>
+          <summary>Выделение в сетке</summary>
+          <div class="group">
+            <label class="lbl">Выделить</label>
+            <select id="hlKind">
+              <option value="">— не выделено —</option>
+              <option value="room">Аудитория</option>
+              <option value="subject">Дисциплина</option>
+              <option value="group">Группа</option>
+              <option value="teacher">Преподаватель</option>
+              <option value="type">Вид занятия</option>
+              <option value="pair">Пара</option>
+            </select>
+            <select id="hlValue" disabled>
+              <option value="">—</option>
+            </select>
+            <select id="hlKind2" style="margin-top:8px">
+              <option value="">— не выделено —</option>
+              <option value="room">Аудитория</option>
+              <option value="subject">Дисциплина</option>
+              <option value="group">Группа</option>
+              <option value="teacher">Преподаватель</option>
+              <option value="type">Вид занятия</option>
+              <option value="pair">Пара</option>
+            </select>
+            <select id="hlValue2" disabled>
+              <option value="">—</option>
+            </select>
+            <label class="chk-lbl" title="Первый параметр — основной цвет, второй — синий, совпавшие по обоим — фиолетовый"><input type="checkbox" id="hlAny"> Любое из двух (иначе — оба сразу)</label>
+            <label class="chk-lbl"><input type="checkbox" id="hlStream"> Подсветить потоковые занятия</label>
+            <label class="chk-lbl" title="Занятие, которое переносили или которому меняли аудиторию, помечается в сетке цветной полосой слева. Настройка общая: так же помечаются занятия в гостевом просмотре (у гостей — по данным последней публикации). Плашка «перенесено» в карточке занятия и журнал переносов от тумблера не зависят."><input type="checkbox" id="moveMarks" checked> Помечать перенесённые занятия</label>
+            <button class="btn secondary sm block" id="hlPair4" type="button" title="Подсветить все занятия 4-й пары (часы 7-8). Нажать ещё раз — снять">🕓 Выделить 4-е пары</button>
+            <button class="btn secondary sm block" id="hlReset" type="button" title="Снять выделение по обоим параметрам">Сбросить выделение</button>
+          </div>
+        </details>
+
+        <details class="sb-cat">
+          <summary>Проверка</summary>
+          <div class="group">
+            <button class="btn secondary sm block" id="btnErrors">Проверить ошибки</button>
+            <a class="btn secondary sm block" href="/curriculum.html" style="white-space:nowrap">Проверить соответствие уч. плану</a>
+            <button class="btn secondary sm block" id="btnStats">Статистика нагрузки</button>
+            <button class="btn secondary sm block" id="btnTeachers" title="Все преподаватели с занятиями: кафедра, дисциплины и отметка о внесённых изменениях">👤 Преподаватели</button>
+          </div>
+        </details>
+
+        <details class="sb-cat">
+          <summary>Сессия</summary>
+          <div class="group">
+            <a class="btn secondary sm block" href="/session.html" style="white-space:nowrap">Календарь сессии</a>
+            <a class="btn secondary sm block" href="/session.html#schedule" style="white-space:nowrap" title="Экзамены и зачёты каждой группы списком: дата, пары, дисциплина, аудитория, преподаватель, поток, дни на подготовку. Поиск по кафедре, дисциплине и преподавателю, печать">График сессии</a>
+            <a class="btn secondary sm block" href="/session.html#exams" style="white-space:nowrap">Список экзаменов и зачётов</a>
+          </div>
+        </details>
+
+        <details class="sb-cat">
+          <summary>Справочники и настройки</summary>
+          <div class="group">
+            <button class="btn secondary sm block" id="btnSemester">Настройка семестра</button>
+            <button class="btn secondary sm block" id="btnCourses">Курсы (для сводного)</button>
+            <button class="btn secondary sm block" id="btnAliases">Замены сокращений</button>
+            <button class="btn secondary sm block" id="btnRefs">Справочники (ёмкость/численность)</button>
+            <button class="btn secondary sm block" id="btnEvents">Мероприятия</button>
+            <button class="btn secondary sm block" id="btnHolidays">Нерабочие дни</button>
+            <button class="btn secondary sm block" id="btnAppearance" title="Цвета видов занятий и состояний сетки, высота строк и размер шрифта. Настройки хранятся на сервере — одинаковы на всех рабочих местах">🎨 Оформление сетки</button>
+          </div>
+        </details>
+
+        <details class="sb-cat">
+          <summary>Экспорт и печать</summary>
+          <div class="group">
+            <button class="btn secondary sm block" id="btnPrint" title="Печать того, что сейчас показано в сетке (панели и кнопки на лист не попадают). То же делает Ctrl+P">🖨 Печать сетки</button>
+            <button class="btn secondary sm block" id="btnExportGroup" title="Семестровое расписание выбранной группы в отдельный файл по шаблону «Расписание группы/Образец группа.xlsx»">⬇ Расписание группы</button>
+            <button class="btn secondary sm block" id="btnExportTeacher" title="Семестровое расписание выбранного преподавателя по тому же шаблону, что и у группы (в ячейке — вид/тема, дисциплина с группами, аудитория)">⬇ Расписание преподавателя</button>
+            <button class="btn secondary sm block" id="btnExportGroups" title="Семестровое расписание каждой группы — по файлу на группу, всё одним zip-архивом">⬇ Все группы (zip)</button>
+            <button class="btn secondary sm block" id="btnExportSummary" title="Сводное расписание за ВЕСЬ семестр: каждая неделя — отдельный лист одного файла (по шаблону «Еженедельное расписание/Образец.xlsx»)">⬇ Сводное за семестр</button>
+            <button class="btn secondary sm block" id="btnExportSubject" title="Расписание одной дисциплины по выбранным учебным группам: сетка недель, в ячейке вид/тема, группы и аудитория">⬇ Расписание дисциплины</button>
+            <button class="btn secondary sm block" id="btnExportWeekly" title="Сводное расписание текущей недели (группы × пары) по шаблону «Еженедельное расписание/Образец.xlsx»">⬇ Сводное за неделю</button>
+          </div>
+        </details>
+
+        <details class="sb-cat">
+          <summary>Публикация и база</summary>
+          <div class="group">
+            <button class="btn sm block" id="btnPublish">Опубликовать</button>
+            <label class="chk-lbl" title="На гостевой странице в перечне занятий преподавателя тему, примечание и вид занятия сможет править ЛЮБОЙ посетитель, без входа. Вид меняется только у практических занятий и только на практический: лекции, зачёты и экзамены не трогаются. Остальное остаётся только для чтения."><input type="checkbox" id="guestEdit"> Разрешить гостям править тему, примечание и вид занятия</label>
+            <label class="chk-lbl" title="На гостевой странице появится кнопка «⬇ Excel»: любой посетитель сможет скачать расписание открытой группы, преподавателя или сводное за неделю тем же файлом, что и админка."><input type="checkbox" id="guestExport"> Разрешить гостям скачивать расписание в Excel</label>
+            <label class="chk-lbl" title="На гостевой странице в карточке занятия появится кнопка «Свободные окна»: посетитель увидит подсветку слотов, куда занятие можно было бы перенести (по группе и преподавателю, без учёта аудиторий). Сам перенос гостю недоступен."><input type="checkbox" id="guestMoves"> Разрешить гостям смотреть свободные окна</label>
+            <label class="chk-lbl" title="В гостевом просмотре занятия окрашиваются в разные цвета: в расписании группы — по дисциплине, у преподавателя и в расписании дисциплины — по учебной группе. Выключите, если нужен однотонный вид."><input type="checkbox" id="guestColors"> Разные цвета занятий у гостей</label>
+            <label class="lbl" title="Адрес, который сервер пропишет в виджет при скачивании с гостевой страницы. Пусто — берётся тот, по которому открыта страница; заполните, если гости заходят по имени, которое на других компьютерах не разрешается.">Адрес сервера для виджета
+              <input type="text" id="widgetHost" placeholder="по адресу страницы" autocomplete="off">
+            </label>
+            <button class="btn secondary sm block" id="btnArchives" title="Версии базы: сохранить текущее состояние и вернуться к любому сохранённому">🗄 Архив базы</button>
+            <button class="btn secondary sm block" id="btnPassword">Сменить пароль</button>
+            <button class="btn danger sm block" id="btnClearSchedule" title="Удалить все занятия и журнал переносов. Справочники, семестры и курсы сохраняются.">Очистить расписание</button>
+            <button class="btn danger sm block" id="btnReset">Очистить базу данных</button>
+          </div>
+        </details>
+
+        <details class="sb-cat">
+          <summary>Импорт расписания</summary>
+          <div class="group">
+            <input type="file" id="fileInput" multiple accept=".html,.htm">
+            <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+            <button class="btn sm block secondary" id="btnPickFolder" type="button">Выбрать папку…</button>
+            <label class="chk-lbl"><input type="checkbox" id="importMerge" checked> Дополнять существующую базу</label>
+            <label class="chk-lbl"><input type="checkbox" id="importAutoOffset" checked> Выравнивать недели по датам файла</label>
+            <label class="chk-lbl"><input type="checkbox" id="importTeacherFilter" checked> Только преподаватели из расписания</label>
+            <label class="lbl" id="offsetManualWrap" hidden>Сдвиг вручную (недель)
+              <input type="number" id="importOffset" value="0" min="-52" max="52" step="1">
+            </label>
+            <button class="btn sm block" id="btnImport">Загрузить и собрать</button>
+            <div class="file-status" id="importStatus"></div>
+          </div>
+        </details>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="grid-head">
+        <h1 id="gridTitle">Загрузите расписание</h1>
+        <div class="view-modes">
+          <button class="tab" data-mode="week">Неделя</button>
+          <button class="tab active" data-mode="semester">Семестр</button>
+          <button class="tab" data-mode="summary">Сводное</button>
+          <select id="summaryKind" class="summary-kind" hidden title="Что показать в сводном">
+            <option value="group">Группы</option>
+            <option value="room">Аудитории</option>
+          </select>
+          <!-- Какие курсы попадают в сводное (столбцы-группы фильтруются целиком). -->
+          <details class="grp-filter" id="crsFilter" hidden>
+            <summary class="btn secondary sm" title="Какие курсы показывать в сводном">🎓 Курсы <span id="crsFilterCount" class="muted-hint"></span></summary>
+            <div class="grp-filter-pop">
+              <div id="crsFilterList" class="grp-filter-list"></div>
+            </div>
+          </details>
+          <label class="chk-lbl" id="sumTeacherWrap" hidden title="Показывать преподавателя в карточках сводного расписания. Выбор запоминается в этом браузере."><input type="checkbox" id="sumTeacherToggle" checked> Преподаватель</label>
+          <!-- Показ/скрытие столбцов-групп в сводном (только внешний вид, данные не меняются). -->
+          <details class="grp-filter" id="grpFilter" hidden>
+            <summary class="btn secondary sm" title="Какие группы показывать в сводном">👁 Группы <span id="grpFilterCount" class="muted-hint"></span></summary>
+            <div class="grp-filter-pop">
+              <div class="grp-filter-acts">
+                <button type="button" class="btn secondary sm" id="grpFilterAll">Показать все</button>
+                <button type="button" class="btn secondary sm" id="grpFilterNone">Скрыть все</button>
+              </div>
+              <div id="grpFilterList" class="grp-filter-list"></div>
+            </div>
+          </details>
+        </div>
+      </div>
+      <div id="gridWrap"></div>
+      <!-- Не размещённые при импорте: пары преподавателя, попавшие на «ЭкзС»
+           группы. В сетку они не влезли, но и теряться не должны — отсюда их
+           перетаскивают в свободные окна вручную. -->
+      <div class="errors-panel orphan-panel" id="orphanPanel" hidden>
+        <div class="orphan-head">
+          <h3>Не размещённые при импорте <span id="orphanCount" class="muted-hint"></span></h3>
+          <button type="button" class="btn secondary sm" id="orphanClear" title="Удалить все не размещённые занятия (можно отменить кнопкой «Отменить»)">Очистить</button>
+        </div>
+        <div class="muted-hint">Занятия из файлов преподавателей, попавшие на экзаменационную сессию группы («ЭкзС»). Перетащите занятие в свободное окно сетки — оно встанет в расписание. Клик открывает карточку.</div>
+        <div class="orphan-list" id="orphanList"></div>
+      </div>
+      <div id="disciplineStatsWrap" style="display:none; margin-top: 1rem; padding: 1rem; background: var(--bg-card); border-radius: 8px; overflow-x: auto;"></div>
+      <div class="errors-panel" id="errorsPanel" style="display:none"></div>
+      <!-- Предложения по аудиториям (сводное расписание): таблица с галочками -->
+      <div class="errors-panel" id="optPanel" style="display:none"></div>
+      <div class="errors-panel" id="reliefPanel" style="display:none"></div>
+    </main>
+
+    <!-- Буфер: узкая полоса справа для временного хранения занятий -->
+    <aside class="buffer" id="bufferPanel" title="Перетащите сюда занятие, чтобы отложить. Потом перетащите его в свободное окно. В режиме копирования (Ctrl+C по занятию) Ctrl+V или ПКМ по буферу кладёт сюда копию.">
+      <div class="buffer-head">
+        <button class="buffer-toggle" id="bufferToggle" type="button" aria-label="Свернуть буфер" title="Свернуть/развернуть">⟩</button>
+        <span class="buffer-title">Буфер</span>
+        <button class="buffer-toggle" id="bufferClear" type="button" aria-label="Очистить буфер" title="Очистить буфер — удалить все отложенные занятия (можно отменить кнопкой «Отменить»)">🗑</button>
+      </div>
+      <div class="buffer-list" id="bufferList"></div>
+    </aside>
+  </div>
+
+  <!-- Карточка занятия (подробные данные) -->
+  <div class="modal-backdrop" id="detailsModal">
+    <div class="modal">
+      <h3 id="detailsTitle">Редактирование занятия</h3>
+      <div class="modal-body">
+      <div class="moved-banner" id="dMovedInfo" hidden></div>
+      <div class="moved-banner" id="dParkedInfo" hidden></div>
+      <div class="row">
+        <div>
+          <label class="lbl">День</label>
+          <select id="dDay">
+            <option value="Пн">Понедельник</option>
+            <option value="Вт">Вторник</option>
+            <option value="Ср">Среда</option>
+            <option value="Чт">Четверг</option>
+            <option value="Пт">Пятница</option>
+            <option value="Сб">Суббота</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">Часы</label>
+          <select id="dPair">
+            <option value="1">1–2</option>
+            <option value="2">3–4</option>
+            <option value="3">5–6</option>
+            <option value="4">7–8</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:4px">
+        <div>
+          <label class="lbl">Неделя (1–26)</label>
+          <input type="number" id="dWeek" min="1" max="26">
+        </div>
+        <div>
+          <label class="lbl">Дата</label>
+          <input type="date" id="dDate">
+        </div>
+      </div>
+      <!-- Только для мероприятий: обозначение (Отп, ОП, …) -->
+      <div id="dEventSection" hidden>
+        <label class="lbl" style="margin-top:8px">Обозначение мероприятия</label>
+        <input type="text" id="dEventLabel" placeholder="напр. Экз, Отп, ОП">
+      </div>
+      <!-- Только для занятий -->
+      <label class="lbl d-lesson-only" style="margin-top:8px">Дисциплина</label>
+      <select id="dDiscipline" class="d-lesson-only"><option value="">— загрузка… —</option></select>
+      <div class="row d-lesson-only" style="margin-top:8px">
+        <div>
+          <label class="lbl">Вид занятия</label>
+          <select id="dType">
+            <option value="">— не указан —</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">Тема</label>
+          <input type="text" id="dTopic" placeholder="Тема занятия (необяз.)">
+        </div>
+      </div>
+      <label class="lbl d-lesson-only" id="dTeacherLabel">Преподаватель (основной)</label>
+      <select id="dTeacher" class="d-lesson-only"></select>
+      <details id="dExtraWrap" class="d-lesson-only" style="margin-top:8px">
+        <summary class="lbl">Дополнительные преподаватели <span id="dExtraCount" class="muted-hint"></span></summary>
+        <div class="al-groups" id="dExtraTeachers"></div>
+      </details>
+      <div id="dBulkTeacherWrap" class="d-lesson-only" style="margin-top:6px">
+        <label class="chk-lbl"><input type="checkbox" id="dReplaceTeacher"> Заменить этого преподавателя во всём расписании группы <span id="dBulkGroup" class="muted-hint"></span></label>
+        <label class="chk-lbl" id="dReplaceTypeWrap"><input type="checkbox" id="dReplaceTeacherType"> Заменить этого преподавателя только для занятий вида <span id="dBulkType" class="muted-hint"></span> в расписании группы <span id="dBulkGroup2" class="muted-hint"></span></label>
+        <label class="chk-lbl"><input type="checkbox" id="dSetTeacherAll"> Поставить выбранного преподавателя на все занятия этой дисциплины у группы в семестре (поток — для всех групп)</label>
+      </div>
+      <div class="row d-lesson-only" style="margin-top:8px">
+        <div>
+          <label class="lbl">Аудитория <span class="al-need" id="dNeedInfo"></span></label>
+          <select id="dRoom"><option value="">— не задана —</option></select>
+          <input type="text" id="dNewRoom" placeholder="или впишите аудиторию вручную" style="margin-top:4px" autocomplete="off">
+        </div>
+        <div>
+          <label class="lbl">Вторая аудитория <span class="muted-hint">(если в двух)</span></label>
+          <select id="dRoom2"><option value="">— нет —</option></select>
+          <input type="text" id="dNewRoom2" placeholder="или впишите аудиторию вручную" style="margin-top:4px" autocomplete="off">
+        </div>
+      </div>
+      <label class="lbl" style="margin-top:8px">Группы</label>
+      <div class="al-groups" id="dGroups"></div>
+      <label class="lbl" style="margin-top:8px">Примечание</label>
+      <textarea id="dNote" rows="3" placeholder="Примечание"></textarea>
+      </div>
+      <div class="actions" style="justify-content:space-between">
+        <div style="display:flex;gap:8px">
+          <button class="btn danger sm" id="detailsDelete" type="button">🗑 Удалить</button>
+          <button class="btn secondary sm" id="detailsLock" type="button" title="Бронь держит место в сетке: пока она стоит, занятие нельзя перенести — ни перетаскиванием, ни сменой дня/пары/недели в карточке, ни возвратом из журнала переносов. Правка полей и удаление доступны как обычно.">🔒 Забронировать</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn secondary sm" id="detailsCancel">Закрыть</button>
+          <button class="btn sm" id="detailsSave">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модал добавления нового занятия -->
+  <div class="modal-backdrop" id="addLessonModal">
+    <div class="modal" style="max-width:520px">
+      <h3 id="alTitle">+ Новое занятие</h3>
+      <label class="chk-lbl" style="margin-bottom:6px"><input type="checkbox" id="alIsEvent"> Мероприятие (Экз, Отп, ОП…) — занимает слот, без проверки накладок</label>
+      <div class="row">
+        <div>
+          <label class="lbl">День</label>
+          <select id="alDay">
+            <option value="Пн">Понедельник</option>
+            <option value="Вт">Вторник</option>
+            <option value="Ср">Среда</option>
+            <option value="Чт">Четверг</option>
+            <option value="Пт">Пятница</option>
+            <option value="Сб">Суббота</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">Часы</label>
+          <select id="alPair">
+            <option value="1">1–2</option>
+            <option value="2">3–4</option>
+            <option value="3">5–6</option>
+            <option value="4">7–8</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:4px">
+        <div>
+          <label class="lbl">Неделя (1–26)</label>
+          <input type="number" id="alWeek" min="1" max="26" value="1">
+        </div>
+        <div>
+          <label class="lbl">Дата</label>
+          <input type="date" id="alDate">
+        </div>
+      </div>
+      <button class="btn secondary sm block" id="alFindSlot" type="button" style="margin-top:8px">📍 Выбрать свободную ячейку в расписании</button>
+      <label class="lbl al-event-only" id="alEventLabelWrap" style="margin-top:8px" hidden>Обозначение мероприятия</label>
+      <input type="text" id="alEventLabel" class="al-event-only" placeholder="напр. Экз, Отп, ОП" hidden>
+      <label class="lbl al-lesson-only" style="margin-top:8px">Дисциплина</label>
+      <select id="alSubject" class="al-lesson-only"><option value="">— загрузка… —</option></select>
+      <input type="text" id="alNewSubject" class="al-lesson-only" placeholder="или введите новую дисциплину" style="margin-top:4px">
+      <div class="row al-lesson-only" style="margin-top:8px">
+        <div>
+          <label class="lbl">Вид занятия</label>
+          <select id="alType">
+            <option value="">— не указан —</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">Тема</label>
+          <input type="text" id="alTopic" placeholder="Тема занятия (необяз.)">
+        </div>
+      </div>
+      <label class="lbl">Аудитория <span class="al-need" id="alNeedInfo"></span></label>
+      <select id="alRoom"><option value="">— загрузка… —</option></select>
+      <input type="text" id="alNewRoom" placeholder="или впишите аудиторию вручную" style="margin-top:4px" autocomplete="off">
+      <div class="file-status">Вписанная вручную аудитория ищется среди всех, включая скрытые; если такой нет — заводится новая.</div>
+      <label class="lbl" style="margin-top:8px">Вторая аудитория <span class="muted-hint">(если занятие идёт в двух)</span></label>
+      <select id="alRoom2"><option value="">— нет —</option></select>
+      <input type="text" id="alNewRoom2" placeholder="или впишите аудиторию вручную" style="margin-top:4px" autocomplete="off">
+      <label class="lbl">Преподаватель</label>
+      <select id="alTeacher"><option value="">— не задан —</option></select>
+      <label class="lbl" style="margin-top:10px">Группы</label>
+      <div class="al-groups" id="alGroups"></div>
+      <div class="reasons" id="alMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="alCancel">Отмена</button>
+        <button class="btn sm" id="alSave">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Отпуск преподавателя: метка «Отп» во все ячейки периода -->
+  <div class="modal-backdrop" id="vacationModal">
+    <div class="modal" style="max-width:460px">
+      <h3 id="vacTitle">🏖 Отпуск преподавателя</h3>
+      <p class="lbl" id="vacTeacher" style="margin:0 0 10px;font-weight:600"></p>
+      <div class="row">
+        <div>
+          <label class="lbl">С (дата)</label>
+          <input type="date" id="vacFrom">
+        </div>
+        <div>
+          <label class="lbl">По (дата)</label>
+          <input type="date" id="vacTo">
+        </div>
+      </div>
+      <label class="lbl" style="margin-top:8px">Причина</label>
+      <select id="vacReason">
+        <option value="Отп">Отпуск (Отп)</option>
+        <option value="__custom">Другое мероприятие…</option>
+      </select>
+      <input type="text" id="vacCustom" placeholder="Метка в сетке, напр. Практика" style="margin-top:6px" hidden>
+      <p class="lbl" style="margin-top:8px">Во все рабочие ячейки периода будет проставлена выбранная метка. Занятия, попавшие в период, переместятся в буфер — расставите их потом.</p>
+      <div class="reasons" id="vacMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="vacCancel">Отмена</button>
+        <button class="btn sm" id="vacSave">Проставить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Добавление дисциплины в подвал группы: выбор из справочника или новая -->
+  <div class="modal-backdrop" id="addSubjectModal" role="dialog" aria-modal="true" aria-labelledby="asTitle">
+    <div class="modal" style="max-width:460px">
+      <h3 id="asTitle">+ Дисциплина группы</h3>
+      <p class="lbl" id="asGroup" style="margin:0 0 10px;font-weight:600"></p>
+      <label class="lbl" for="asPick">Из справочника</label>
+      <select id="asPick"><option value="">— новая дисциплина —</option></select>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label class="lbl" for="asAbbr">Обозначение</label>
+          <input type="text" id="asAbbr" placeholder="напр. ТПРН">
+        </div>
+        <div>
+          <label class="lbl" for="asHours">Кол-во часов</label>
+          <input type="text" id="asHours" placeholder="напр. 30-42">
+        </div>
+      </div>
+      <label class="lbl" style="margin-top:8px" for="asFull">Название дисциплины</label>
+      <input type="text" id="asFull" placeholder="Полное название">
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label class="lbl" for="asDept">Кафедра</label>
+          <input type="text" id="asDept" placeholder="№">
+        </div>
+        <div>
+          <label class="lbl" for="asReport">Отчётность</label>
+          <input type="text" id="asReport" placeholder="Э / ЗО">
+        </div>
+      </div>
+      <label class="lbl" style="margin-top:8px" for="asLecturer">Лектор</label>
+      <input type="text" id="asLecturer" placeholder="Фамилия И.О., степень, звание">
+      <label class="lbl" style="margin-top:8px" for="asOthers">Другие виды занятий</label>
+      <input type="text" id="asOthers" placeholder="Фамилии через ;">
+      <div class="reasons" id="asMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="asCancel">Отмена</button>
+        <button class="btn sm" id="asSave">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Примечание к дате: текст + группы, в чьих сетках дата подсветится -->
+  <div class="modal-backdrop" id="dateNoteModal" role="dialog" aria-modal="true" aria-labelledby="dnTitle">
+    <div class="modal" style="max-width:460px">
+      <h3 id="dnTitle">📝 Примечание к дате</h3>
+      <p class="lbl" id="dnDate" style="margin:0 0 10px;font-weight:600"></p>
+      <label class="lbl" for="dnText">Текст примечания</label>
+      <textarea id="dnText" rows="3" placeholder="Напр.: занятия по расписанию пятницы"></textarea>
+      <label class="lbl" style="margin-top:8px">Показывать в расписании групп <span class="muted-hint">(ни одной — во всех)</span></label>
+      <div class="al-groups" id="dnGroups"></div>
+      <div class="reasons" id="dnMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="dnDelete" hidden>Удалить</button>
+        <button class="btn secondary sm" id="dnCancel">Отмена</button>
+        <button class="btn sm" id="dnSave">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Вывод аудитории из эксплуатации: переселить занятия периода в свободные -->
+  <div class="modal-backdrop" id="decommModal">
+    <div class="modal" style="max-width:460px">
+      <h3>🛠 Вывод аудитории из эксплуатации</h3>
+      <p class="lbl" id="decommRoom" style="margin:0 0 10px;font-weight:600"></p>
+      <div class="row">
+        <div>
+          <label class="lbl">С (дата)</label>
+          <input type="date" id="decommFrom">
+        </div>
+        <div>
+          <label class="lbl">По (дата)</label>
+          <input type="date" id="decommTo">
+        </div>
+      </div>
+      <label class="lbl" style="margin-top:8px">Причина</label>
+      <input type="text" id="decommReason" placeholder="напр. ремонт, авария, дезинфекция">
+      <p class="lbl" style="margin-top:8px">Все занятия аудитории в этот период переселятся в свободные аудитории и подсветятся в сетке (до обновления страницы). Отменить — кнопкой «Отменить».</p>
+      <div class="reasons" id="decommMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="decommCancel">Отмена</button>
+        <button class="btn sm" id="decommSave">Вывести и переселить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Плашка режима выбора свободной ячейки прямо в сетке -->
+  <div class="pick-banner" id="pickBanner" hidden>
+    <span id="pickInfo">Кликните подсвеченную ячейку в сетке для нового занятия</span>
+    <button class="btn secondary sm" id="pickCancel" type="button">Отмена</button>
+  </div>
+
+  <!-- Плашка переноса занятия кликом (кнопка ⇄ в перечне занятий преподавателя) -->
+  <div class="pick-banner" id="moveBanner" hidden>
+    <span id="moveInfo">Кликните подсвеченное окно в сетке</span>
+    <button class="btn secondary sm" id="moveCancel" type="button">Отмена</button>
+  </div>
+
+  <!-- Плашка режима ручной блокировки свободных ячеек преподавателя -->
+  <div class="pick-banner" id="blockBanner" hidden>
+    <span id="blockInfo">Кликайте подсвеченные свободные ячейки, чтобы заблокировать их. Можно кликать несколько раз подряд.</span>
+    <button class="btn secondary sm" id="blockDone" type="button">Готово</button>
+  </div>
+
+  <!-- Диалог замен сокращений дисциплин -->
+  <div class="modal-backdrop" id="aliasesModal">
+    <div class="modal">
+      <h3>Замены сокращений дисциплин</h3>
+      <div class="file-status">Применяются при загрузке расписания: сокращение слева заменяется на сокращение справа во всех файлах (группы, аудитории, преподаватели). Напр. ИЭП → ИРТС.</div>
+      <div class="ref-list" id="aliasesList"></div>
+      <button class="btn secondary sm" id="aliasesAdd" type="button">+ Добавить</button>
+      <div class="actions">
+        <button class="btn secondary sm" id="aliasesCancel">Отмена</button>
+        <button class="btn sm" id="aliasesSave">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Проблемные файлы импорта: сдвиг не подтверждён датами — ручной выбор -->
+  <div class="modal-backdrop" id="importProblemsModal">
+    <div class="modal" style="max-width:680px">
+      <h3>Файлы с неподтверждённым сдвигом</h3>
+      <div class="file-status">Эти файлы НЕ импортированы: дату их 1-й недели не удалось подтвердить по сетке дат. Укажите сдвиг недель для каждого файла (0 = недели файла совпадают с сеткой семестра) и импортируйте повторно.</div>
+      <div class="ref-list" id="importProblemsList"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="importProblemsCancel">Закрыть</button>
+        <button class="btn sm" id="importProblemsApply">Импортировать со сдвигом</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог настройки курсов -->
+  <div class="modal-backdrop" id="coursesModal">
+    <div class="modal">
+      <h3>Курсы групп</h3>
+      <div class="file-status">Группы объединяются по первым 2 цифрам. Укажите номер курса (1–5) — по нему сортируются столбцы в сводном виде.</div>
+      <div class="ref-list" id="coursesList"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="coursesCancel">Отмена</button>
+        <button class="btn sm" id="coursesSave">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог выбора свободной аудитории -->
+  <div class="modal-backdrop" id="roomModal">
+    <div class="modal">
+      <h3>Аудитория занята — выберите свободную</h3>
+      <div class="file-status" id="roomInfo"></div>
+      <div class="room-pick" id="roomList"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="roomCancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Подсказки для ячейки без аудитории (после расстановки СР) -->
+  <div class="modal-backdrop" id="srHelpModal">
+    <div class="modal" style="max-width:560px">
+      <h3>Нет аудитории — варианты размещения</h3>
+      <div class="file-status" id="srHelpInfo"></div>
+      <div class="room-pick" id="srHelpList"></div>
+      <div class="actions" style="justify-content:space-between">
+        <button class="btn secondary sm" id="srHelpManual">Поставить вручную…</button>
+        <button class="btn secondary sm" id="srHelpClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Настройки подбора аудиторий: порядок правил и есть их приоритет -->
+  <div class="modal-backdrop" id="rpModal">
+    <div class="modal" style="max-width:660px">
+      <h3>Настройки подбора аудиторий</h3>
+      <div class="file-status">Порядок правил — это и есть приоритет: правило, стоящее ниже, никогда не применяется ценой того, что стоит выше. Снятая галочка — правило не участвует совсем.</div>
+
+      <label class="lbl">Правила и приоритет</label>
+      <div class="rp-rules" id="rpRules"></div>
+
+      <label class="lbl">Компьютерные классы</label>
+      <div class="rp-grid">
+        <label>Дисциплины, которым класс нужен<input type="text" id="rpCcNeed" placeholder="информатик"></label>
+        <label>Дисциплины-исключения (класс не нужен)<input type="text" id="rpCcSkip" placeholder="химия, электротехника"></label>
+      </div>
+
+      <label class="lbl">Допуски</label>
+      <div class="rp-grid">
+        <label>Лишних мест ради «одной аудитории»<input type="number" id="rpMaxExtra" min="0" max="500"></label>
+        <label>Во сколько раз нехватка мест хуже лишних<input type="number" id="rpOverWeight" min="1" max="100"></label>
+        <label>Менять по размеру, только если мест меняется больше чем на<input type="number" id="rpMinGain" min="0" max="500"></label>
+      </div>
+      <div class="opt-rules rp-pairs">Собирать в серии пары:
+        <label class="chk-lbl"><input type="checkbox" class="rp-pair" value="1"> 1</label>
+        <label class="chk-lbl"><input type="checkbox" class="rp-pair" value="2"> 2</label>
+        <label class="chk-lbl"><input type="checkbox" class="rp-pair" value="3"> 3</label>
+        <label class="chk-lbl"><input type="checkbox" class="rp-pair" value="4"> 4</label>
+      </div>
+
+      <label class="lbl">Исключения</label>
+      <div class="rp-grid">
+        <label>Дисциплины, которые не трогать<input type="text" id="rpSkipSubjects" placeholder="строевая"></label>
+        <label>Аудитории, которые не трогать (Ctrl — несколько)<select id="rpSkipRooms" multiple size="6"></select></label>
+      </div>
+      <label class="chk-lbl"><input type="checkbox" id="rpSkipLocked"> не трогать забронированные занятия</label>
+      <div class="file-status">Физподготовка, спортзалы, плац и казармы исключены всегда — их подбирать не из чего.</div>
+
+      <div class="actions" style="justify-content:space-between">
+        <button class="btn secondary sm" id="rpClose" type="button">Закрыть</button>
+        <button class="btn sm" id="rpSave" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог настройки семестра -->
+  <div class="modal-backdrop" id="semesterModal">
+    <div class="modal">
+      <h3>Настройка семестра</h3>
+
+      <label class="lbl">Сохранённые семестры</label>
+      <div class="sem-saved" id="semSaved"></div>
+
+      <div class="file-status" style="margin-top:14px">Добавить / изменить активный семестр. Сетка недель строится от даты начала (Неделя 1 — неделя даты начала).</div>
+      <div class="row">
+        <div>
+          <label class="lbl">Семестр</label>
+          <select id="semName">
+            <option value="осень">Осенний</option>
+            <option value="весна">Весенний</option>
+          </select>
+        </div>
+        <div>
+          <label class="lbl">Недель в семестре</label>
+          <input type="text" id="semWeeks" readonly>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="lbl">Дата начала</label>
+          <input type="date" id="semStart">
+        </div>
+        <div>
+          <label class="lbl">Дата конца</label>
+          <input type="date" id="semEnd">
+        </div>
+      </div>
+      <div class="reasons" id="semMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="semCancel">Отмена</button>
+        <button class="btn sm" id="semSave">Сохранить и сделать активным</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Архив базы: версии всей базы с примечаниями -->
+  <div class="modal-backdrop" id="archivesModal">
+    <div class="modal" style="max-width:760px">
+      <h3>🗄 Архив базы</h3>
+      <div class="file-status">Версия — снимок всей базы целиком: занятия, справочники, семестры и журнал переносов. Переключение заменяет текущую базу выбранной версией; текущее состояние при этом само уходит в отдельную версию, поэтому переключение обратимо. Гостевая страница обновится после кнопки «Опубликовать».<br>Перенос между устройствами: «⬇» выгружает версию одним файлом, «⬆ Загрузить файл» принимает его на другом устройстве. Примечание и дата хранятся внутри файла и едут вместе с ним.</div>
+      <div class="arc-create">
+        <input type="text" id="arcNote" maxlength="500" placeholder="Примечание к версии (напр. до переноса занятий Иванова)">
+        <button class="btn sm" id="arcCreate" type="button">💾 Сохранить текущую</button>
+        <button class="btn secondary sm" id="arcImport" type="button" title="Принять файл версии, выгруженный на другом устройстве">⬆ Загрузить файл</button>
+      </div>
+      <input type="file" id="arcFile" accept=".db" hidden>
+      <div class="arc-list" id="arcList"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="arcClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог полной очистки -->
+  <div class="modal-backdrop" id="resetModal">
+    <div class="modal">
+      <h3>Полная очистка базы данных</h3>
+      <div class="file-status">Будут удалены все занятия, справочники и настройка семестра. Действие необратимо. Введите пароль для подтверждения.</div>
+      <div class="field" style="margin-top:12px">
+        <label class="lbl">Пароль</label>
+        <input type="password" id="resetPass" placeholder="Пароль очистки">
+      </div>
+      <div class="reasons" id="resetMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="resetCancel">Отмена</button>
+        <button class="btn danger sm" id="resetConfirm">Очистить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог смены пароля -->
+  <div class="modal-backdrop" id="passwordModal">
+    <div class="modal">
+      <h3>Сменить пароль</h3>
+      <div class="field">
+        <label class="lbl">Что меняем</label>
+        <select id="pwTarget">
+          <option value="login">Пароль входа</option>
+          <option value="reset">Пароль очистки базы</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label class="lbl">Текущий пароль</label>
+        <input type="password" id="pwCurrent" autocomplete="current-password" placeholder="Текущий пароль">
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label class="lbl">Новый пароль</label>
+        <input type="password" id="pwNew" autocomplete="new-password" placeholder="Новый пароль">
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label class="lbl">Повтор нового пароля</label>
+        <input type="password" id="pwNew2" autocomplete="new-password" placeholder="Ещё раз">
+      </div>
+      <div class="reasons" id="pwMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="pwCancel">Отмена</button>
+        <button class="btn sm" id="pwConfirm">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог справочников -->
+  <div class="modal-backdrop" id="refModal">
+    <div class="modal">
+      <h3>Справочники</h3>
+      <div class="tabs">
+        <div class="tab active" data-ref-tab="rooms">Аудитории</div>
+        <div class="tab" data-ref-tab="groups">Группы</div>
+        <div class="tab" data-ref-tab="hidden">Скрытые аудитории</div>
+        <div class="tab" data-ref-tab="hidden-groups">Скрытые группы</div>
+        <div class="tab" data-ref-tab="events">Мероприятия</div>
+        <div class="tab" data-ref-tab="lesson-types">Виды занятий</div>
+      </div>
+      <div style="padding: 10px; display: flex; gap: 10px; align-items: center;">
+        <input type="text" id="refSearch" placeholder="Поиск по названию..." autocomplete="off" style="flex: 1; box-sizing: border-box; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); color: var(--text);">
+        <button class="btn sm secondary" id="btnToggleAll" style="display: none;"></button>
+      </div>
+      <div class="ref-list" id="refList"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="refClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Диалог нерабочих дней -->
+  <!-- Оформление сетки: цвета видов занятий/состояний и размеры. Хранится на
+       сервере — вид одинаковый на всех рабочих местах. -->
+  <div class="modal-backdrop" id="appearanceModal">
+    <div class="modal" style="max-width:640px">
+      <h3>Оформление сетки</h3>
+      <div class="file-status">Изменения видно сразу; «Сохранить» запоминает их на сервере для всех рабочих мест.</div>
+      <div class="app-section"><b>Виды занятий</b><div class="app-grid" id="appTypes"></div></div>
+      <div class="app-section"><b>Состояния сетки</b><div class="app-grid" id="appStates"></div></div>
+      <div class="app-section"><b>Размеры</b><div class="app-grid" id="appSizes"></div></div>
+      <div class="actions" style="justify-content:space-between">
+        <button class="btn secondary sm" id="appReset" type="button">Вернуть стандартные</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn secondary sm" id="appCancel">Закрыть</button>
+          <button class="btn sm" id="appSave">Сохранить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Выгрузка расписания дисциплины: сначала выбираем дисциплину и её группы -->
+  <div class="modal-backdrop" id="subjExportModal">
+    <div class="modal" style="max-width:560px">
+      <h3>Расписание дисциплины</h3>
+      <div class="file-status">Сетка недель по шаблону группы: в ячейке — вид/тема, учебные группы и аудитория. Мероприятия (Отп, ЭкзС…) в файл не идут.</div>
+      <label class="lbl" style="margin-top:8px">Дисциплина</label>
+      <select id="seSubject"></select>
+      <label class="lbl" style="margin-top:8px">Учебные группы <span id="seCount" class="muted-hint"></span></label>
+      <div class="al-groups" id="seGroups"></div>
+      <div class="actions" style="justify-content:space-between">
+        <div style="display:flex;gap:8px">
+          <button class="btn secondary sm" id="seAll" type="button">Выбрать все</button>
+          <button class="btn secondary sm" id="seNone" type="button">Снять все</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn secondary sm" id="seCancel" type="button">Отмена</button>
+          <button class="btn sm" id="seSave" type="button">⬇ Скачать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="holidaysModal">
+    <div class="modal">
+      <h3>Нерабочие дни</h3>
+      <div class="file-status">Праздники и каникулы — по одной дате на строке (формат ГГГГ-ММ-ДД). Ячейки расписания подсветятся, а при создании/переносе занятия на такой день появится предупреждение.</div>
+      <textarea id="holidaysList" rows="10" style="margin-top:10px" placeholder="2025-11-04&#10;2026-01-01&#10;2026-01-02&#10;..."></textarea>
+      <div class="reasons" id="holidaysMsg"></div>
+      <div class="actions">
+        <button class="btn secondary sm" id="holidaysCancel">Отмена</button>
+        <button class="btn sm" id="holidaysSave">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</body>
+</html>

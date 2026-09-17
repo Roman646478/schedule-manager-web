@@ -1,0 +1,1571 @@
+/* ============================================================
+   Компонентные стили. Цвета — ТОЛЬКО через токены из theme.css.
+   Классы: kebab-case (см. .claude-rules.md §3).
+   ============================================================ */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+/* Шапка */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--foreground); }
+.brand .logo {
+  width: 30px; height: 30px;
+  border-radius: calc(var(--radius) - 0.25rem);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  display: grid; place-items: center; font-size: 15px; font-weight: 700;
+}
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+/* Hero */
+.hero { text-align: center; padding: 64px 0 40px; }
+.hero h1 { font-size: 42px; line-height: 1.1; margin: 0 0 14px; letter-spacing: -0.02em; color: var(--foreground); }
+.hero p { color: var(--muted-foreground); font-size: 18px; max-width: 620px; margin: 0 auto 28px; }
+
+.badge {
+  display: inline-block; padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--secondary); border: 1px solid var(--border);
+  color: var(--secondary-foreground); font-size: 13px; margin-bottom: 20px;
+}
+
+/* Кнопки */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 20px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: filter 0.15s, border-color 0.15s, background 0.15s;
+  background: var(--primary); color: var(--primary-foreground);
+}
+.btn:hover { filter: brightness(0.93); text-decoration: none; }
+.btn.secondary { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--border); }
+.btn.secondary:hover { filter: none; border-color: var(--ring); }
+.btn.danger { background: var(--destructive); color: var(--destructive-foreground); }
+.btn.icon { padding: 9px 11px; }
+.btn.full { width: 100%; justify-content: center; margin-top: 6px; }
+
+/* Карточки возможностей */
+.features {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px; margin-top: 48px;
+}
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px;
+  box-shadow: var(--shadow-md);
+  color: var(--card-foreground);
+}
+.card .ic { font-size: 22px; margin-bottom: 10px; }
+.card h3 { margin: 0 0 6px; font-size: 16px; color: var(--card-foreground); }
+.card p { margin: 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; }
+
+/* Форма входа */
+.auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+/* Карточка входа — «матовое стекло» поверх живого градиента фона. */
+.auth-card {
+  width: 100%; max-width: 400px;
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius); padding: 36px 34px 30px;
+  box-shadow: var(--shadow-md),
+    inset 0 1px 0 color-mix(in srgb, var(--primary-foreground) 16%, transparent);
+  animation: card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.auth-head { text-align: center; margin-bottom: 26px; }
+.auth-logo {
+  width: 54px; height: 54px; margin: 0 auto 16px;
+  display: grid; place-items: center;
+  border-radius: calc(var(--radius) - 0.1rem);
+  background: var(--primary); color: var(--primary-foreground);
+  font-weight: 800; font-size: 24px;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+.auth-card h1 { margin: 0 0 6px; font-size: 22px; font-weight: 700; color: var(--card-foreground); }
+.auth-card .sub { color: var(--muted-foreground); font-size: 13.5px; margin: 0; line-height: 1.5; }
+
+/* Базовые поля — общие с модалками админки (НЕ трогаем под .auth-card). */
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: var(--muted-foreground); margin-bottom: 6px; }
+.field input {
+  width: 100%; padding: 11px 13px;
+  border-radius: calc(var(--radius) - 0.25rem);
+  border: 1px solid var(--border);
+  background: var(--input);
+  color: var(--foreground); font-family: var(--font-sans); font-size: 15px;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.field input:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 25%, transparent);
+}
+
+/* Поля входа: иконка слева, стеклянный фон, кнопка показа пароля. */
+.auth-card .field label { font-weight: 500; margin-bottom: 7px; }
+.auth-card .input-wrap { position: relative; display: flex; align-items: center; }
+.auth-card .field input {
+  padding: 12px 14px 12px 42px;
+  background: color-mix(in srgb, var(--input) 65%, transparent);
+}
+.auth-card .input-wrap.has-toggle input { padding-right: 44px; }
+.auth-card .field input:focus { background: var(--input); }
+.input-icon {
+  position: absolute; left: 13px; width: 18px; height: 18px;
+  color: var(--muted-foreground); pointer-events: none; transition: color 0.15s;
+}
+.auth-card .field input:focus ~ .input-icon { color: var(--primary); }
+.pw-toggle {
+  position: absolute; right: 6px;
+  display: grid; place-items: center; width: 32px; height: 32px;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--muted-foreground); border-radius: calc(var(--radius) - 0.4rem);
+  transition: color 0.15s, background 0.15s;
+}
+.pw-toggle:hover { color: var(--foreground); background: color-mix(in srgb, var(--muted-foreground) 16%, transparent); }
+.pw-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.pw-toggle svg { width: 18px; height: 18px; }
+.pw-toggle .icon-off { display: none; }
+.pw-toggle.show .icon-on { display: none; }
+.pw-toggle.show .icon-off { display: block; }
+
+/* Кнопка входа с индикатором загрузки. */
+.auth-submit { margin-top: 22px; height: 46px; font-size: 15px; font-weight: 600; }
+.btn-spinner {
+  width: 17px; height: 17px; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent;
+  animation: spin 0.6s linear infinite; display: none;
+}
+.btn.loading { cursor: progress; }
+.btn.loading .btn-label { display: none; }
+.btn.loading .btn-spinner { display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.msg { font-size: 13px; margin-top: 14px; min-height: 18px; text-align: center; }
+.msg.error { color: var(--destructive); font-weight: 500; }
+.foot-note { text-align: center; margin-top: 22px; font-size: 13px; }
+.foot-note a { display: inline-flex; align-items: center; gap: 6px; color: var(--muted-foreground); transition: color 0.15s; }
+.foot-note a:hover { color: var(--primary); text-decoration: none; }
+.foot-note a svg { width: 15px; height: 15px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-card { animation: none; }
+}
+
+footer.site { text-align: center; color: var(--muted-foreground); font-size: 13px; padding: 40px 0 24px; }
+
+/* ---------------------- Динамический фон ---------------------- */
+/* Переиспользуемый градиентный фон в цветах темы, следящий за мышью.
+   Лежит ПОД контентом (z-index: -1). Позиция курсора — через --mx/--my
+   из /js/bg-gradient.js. Подключается на нужных страницах добавлением
+   <div class="bg-gradient" aria-hidden="true"></div> в начало <body>. */
+.bg-gradient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  --mx: 50%;
+  --my: 50%;
+  background:
+    radial-gradient(45vmax 45vmax at var(--mx) var(--my),
+      color-mix(in srgb, var(--primary) 60%, transparent), transparent 60%),
+    radial-gradient(40vmax 40vmax at calc(100% - var(--mx)) calc(100% - var(--my)),
+      color-mix(in srgb, var(--chart-4) 60%, transparent), transparent 60%),
+    radial-gradient(55vmax 55vmax at calc(var(--mx) * 0.6 + 20%) calc(100% - var(--my) * 0.6),
+      color-mix(in srgb, var(--chart-1) 45%, transparent), transparent 65%),
+    linear-gradient(125deg, var(--background), var(--accent));
+}
+/* Медленное «дыхание» фона — динамика даже без движения мыши. */
+.bg-gradient::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(35vmax 35vmax at 30% 30%,
+      color-mix(in srgb, var(--chart-2) 35%, transparent), transparent 60%),
+    radial-gradient(35vmax 35vmax at 70% 70%,
+      color-mix(in srgb, var(--chart-5) 35%, transparent), transparent 60%);
+  animation: bg-breathe 16s ease-in-out infinite alternate;
+}
+@keyframes bg-breathe {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); }
+  to   { transform: translate3d(3%, 2%, 0) scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bg-gradient::after { animation: none; }
+}
+
+/* ---------------------- Админка ---------------------- */
+.admin-layout {
+  display: grid; gap: 0; min-height: calc(100vh - 61px);
+  --sidebar-w: 300px; --buffer-w: 5vw;
+  grid-template-columns: var(--sidebar-w) 1fr var(--buffer-w);
+}
+.admin-layout.sidebar-collapsed { --sidebar-w: 34px; }
+.admin-layout.buffer-collapsed { --buffer-w: 34px; }
+/* Свёрнутую полоску можно развернуть кликом в любом месте — курсор-указатель. */
+.admin-layout.sidebar-collapsed .sidebar,
+.admin-layout.buffer-collapsed .buffer { cursor: pointer; }
+/* Свёрнутая левая панель */
+.sidebar-head { display: flex; justify-content: flex-start; }
+.admin-layout.sidebar-collapsed .sidebar { padding: 8px 4px; }
+.admin-layout.sidebar-collapsed .sidebar > *:not(.sidebar-head) { display: none; }
+.admin-layout.sidebar-collapsed .sidebar-head { justify-content: center; }
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+  padding: 18px;
+  display: flex; flex-direction: column; gap: 22px;
+}
+.sidebar h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); margin: 0 0 10px; }
+.sidebar .group { display: flex; flex-direction: column; gap: 8px; }
+/* Пара связанных кнопок в ряд (напр. «Расставить СР» / «Удалить СР»). */
+.btn-pair { display: flex; gap: 8px; }
+.btn-pair > .btn { flex: 1; min-width: 0; justify-content: center; white-space: nowrap;
+  padding: 7px 6px; font-size: 12px; }
+
+/* Категории действий — нативные сворачиваемые секции <details> */
+.sb-actions { display: flex; flex-direction: column; gap: 8px; }
+.sb-cat { border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.25rem); background: var(--card); }
+.sb-cat > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px;
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+}
+.sb-cat > summary::-webkit-details-marker { display: none; }
+.sb-cat > summary::after { content: '⌄'; font-size: 15px; line-height: 1; transition: transform 0.2s; }
+.sb-cat[open] > summary::after { transform: rotate(180deg); }
+.sb-cat > summary:hover { color: var(--foreground); }
+.sb-cat[open] > summary { color: var(--foreground); border-bottom: 1px solid var(--border); }
+.sb-cat .group { padding: 12px; }
+@media (prefers-reduced-motion: reduce) { .sb-cat > summary::after { transition: none; } }
+.main { padding: 22px 26px; overflow: auto; }
+
+label.lbl { font-size: 12px; color: var(--muted-foreground); }
+select, input[type="number"], input[type="text"], textarea {
+  width: 100%; padding: 9px 11px;
+  border-radius: calc(var(--radius) - 0.3rem);
+  border: 1px solid var(--border); background: var(--input);
+  color: var(--foreground); font-family: var(--font-sans); font-size: 14px; outline: none;
+}
+textarea { resize: vertical; }
+select:focus, input:focus { border-color: var(--ring); }
+.btn.sm { padding: 8px 12px; font-size: 13px; }
+.btn.block { width: 100%; justify-content: center; }
+/* Любое собственное правило display (у .btn, .chk-lbl, панелей, подсказок…)
+   перекрывает браузерное [hidden]{display:none}, и элемент с атрибутом hidden
+   остаётся на экране. Одно общее правило закрывает это раз и навсегда —
+   раньше на каждый такой класс заводили отдельную строку. */
+[hidden] { display: none !important; }
+.file-status { font-size: 12px; color: var(--muted-foreground); min-height: 16px; }
+.chk-lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--foreground); cursor: pointer; }
+.chk-lbl input { width: auto; }
+
+/* Сетка расписания */
+.grid-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
+.grid-head h1 { font-size: 20px; margin: 0; }
+.week-pick { display: flex; align-items: center; gap: 8px; }
+.week-pick select { width: auto; }
+
+/* Навигация по неделям: ◀ [неделя] ▶ */
+.week-nav { display: flex; align-items: center; gap: 6px; }
+.week-nav select { flex: 1; min-width: 0; }
+.week-nav .btn { flex: none; padding: 8px 11px; line-height: 1; }
+.week-nav .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--card); }
+table.grid th, table.grid td { border: 1px solid var(--border); vertical-align: top; padding: 0; }
+table.grid td.slot { background: var(--card); }
+/* Ячейка несуществующей пары (4-я пара в субботу): неактивна, заштрихована. */
+table.grid td.no-pair {
+  background:
+    repeating-linear-gradient(135deg,
+      var(--muted) 0, var(--muted) 8px,
+      color-mix(in srgb, var(--muted-foreground) 14%, var(--muted)) 8px,
+      color-mix(in srgb, var(--muted-foreground) 14%, var(--muted)) 10px);
+  cursor: not-allowed;
+}
+table.grid thead th { background: var(--secondary); color: var(--secondary-foreground); font-size: 13px; padding: 8px; text-align: center; }
+table.grid .time-col { width: var(--grid-time-w); }
+table.grid .time-cell { background: var(--muted); color: var(--muted-foreground); font-size: 12px; text-align: center; padding: 8px 4px; }
+table.grid td.slot { height: var(--grid-row-h); padding: 4px; }
+
+/* Вид «Кафедра» (гостевой): недельные сетки всех преподавателей кафедры одной
+   таблицей. Блок преподавателя — та же сетка «часы × дни», что и в его личном
+   недельном расписании; блоки идут сверху вниз и разделены жирной линией. */
+table.grid.dept-grid .tch-col {
+  width: 130px;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  vertical-align: middle;
+  padding: 8px 4px;
+}
+/* Места и примечание аудитории — второй строкой под номером, помельче. */
+table.grid.dept-grid .tch-col .room-sub {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.75;
+}
+table.grid.dept-grid tr.dept-row1 > td,
+table.grid.dept-grid tr.dept-row1 > th { border-top: 3px solid var(--muted-foreground); }
+/* Строк здесь вчетверо больше, чем в личной сетке (4 пары × N преподавателей),
+   поэтому часы и ячейки — компактнее: иначе кафедра из 16 человек уезжает на
+   несколько экранов вниз. */
+table.grid.dept-grid .time-cell { padding: 2px 4px; font-size: 11px; line-height: 1.25; }
+table.grid.dept-grid td.slot { height: auto; padding: 2px; }
+
+.lesson {
+  background: var(--accent); color: var(--accent-foreground);
+  border-radius: calc(var(--radius) - 0.35rem);
+  padding: 6px 8px; font-size: var(--grid-font); line-height: 1.35; cursor: pointer;
+  border: 1px solid transparent; transition: border-color 0.12s; height: 100%;
+}
+.lesson:hover { border-color: var(--ring); }
+.lesson .subj { font-weight: 700; }
+.lesson .meta { color: var(--accent-foreground); opacity: 0.85; }
+/* Постоянная окраска по виду занятия. Идёт ДО заливок «нет преподавателя» и
+   зачёта/экзамена — те перекрывают вид намеренно. «Перенесено» заливку НЕ
+   трогает (полоса + значок), поэтому цвет вида виден и у перенесённых. */
+.lesson.t-lec  { background: var(--lesson-lec-bg);  border-color: color-mix(in srgb, var(--type-lec) 45%, transparent); }
+.lesson.t-prac { background: var(--lesson-prac-bg); border-color: color-mix(in srgb, var(--type-prac) 45%, transparent); }
+.lesson.t-lab  { background: var(--lesson-lab-bg);  border-color: color-mix(in srgb, var(--type-lab) 45%, transparent); }
+.lesson.t-sem  { background: var(--lesson-sem-bg);  border-color: color-mix(in srgb, var(--type-sem) 45%, transparent); }
+.lesson.t-grp  { background: var(--lesson-grp-bg);  border-color: color-mix(in srgb, var(--type-grp) 45%, transparent); }
+.lesson.t-ctrl { background: var(--lesson-ctrl-bg); border-color: color-mix(in srgb, var(--type-ctrl) 45%, transparent); }
+
+.lesson.no-teacher { background: var(--lesson-warn-bg); }
+/* Формы контроля — отдельная заливка: зачёт (синий) и экзамен (тёплый). */
+.lesson.zachet {
+  background: var(--lesson-zachet-bg);
+  border-color: color-mix(in srgb, var(--chart-1) 55%, transparent);
+}
+.lesson.exam {
+  background: var(--lesson-exam-bg);
+  border-color: color-mix(in srgb, var(--chart-2) 70%, transparent);
+  font-weight: 600;
+}
+/* Гостевой просмотр, режим «разные цвета»: оттенок --tint считает guest.js по
+   дисциплине (расписание группы) или по группе (преподаватель, дисциплина).
+   Разбавляем фоном карточки — правило работает в обеих темах. Подсветка (.hl)
+   и «перенесено» стоят ниже и перекрывают цвет намеренно. */
+.lesson.tint {
+  background: color-mix(in srgb, var(--tint) 26%, var(--card));
+  border-color: color-mix(in srgb, var(--tint) 55%, transparent);
+}
+/* Перенесённое занятие (есть запись в журнале переносов): только цветная полоса
+   слева — ни заливки, ни обводки всей карточки.
+   Заливку тут держать нельзя — правило стоит ниже окраски по виду занятия, форм
+   контроля и гостевых цветов и стирало их все. Полоса — псевдоэлемент, а не тень
+   и не фон: подсветка (.hl) перебивает и фон, и box-shadow, а ::after — нет, и
+   по тексту полоса не проходит (её ширина укладывается в паддинг карточки).
+   Цвет — --primary, а не --grid-line: последний настраивается в «Оформлении»
+   («Ячейка под курсором»), и пометка переноса теряла контраст вместе с ним. */
+.lesson.moved {
+  position: relative;
+}
+.lesson.moved::after {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+  background: var(--primary); pointer-events: none;
+  border-top-left-radius: inherit; border-bottom-left-radius: inherit;
+}
+.lesson .warn { color: var(--destructive); font-weight: 600; }
+
+/* Вид «Неделя» (гостевой просмотр И админка): карточка занятия заполняет всю
+   высоту ячейки и центрирует текст по вертикали. height:100% не всегда
+   растягивает дочерний блок внутри table-cell, поэтому короткие карточки (СР,
+   маркеры Отп/ОП/ЭПР) оставались низкими. Задаём явный пол min-height = высота
+   ячейки минус её паддинги (2×4px). Считаем от --grid-row-h, а не от числа:
+   высота строки — настройка («Оформление»), и зашитый минимум её глушил — при
+   высоте меньше 78px карточка всё равно оставалась 70px. Несколько занятий в
+   одной ячейке (подгруппы) при этом сохраняются: карточки складываются стопкой,
+   ячейка растёт, обе видны. Мероприятия (.event) исключены — они позиционируются
+   absolute inset:0 и заполняют ячейку сами. */
+#guestRoot table.grid:not(.semester):not(.dept-grid) .lesson:not(.event),
+#gridWrap table.grid:not(.semester) .lesson:not(.event) {
+  height: auto; /* перебиваем базовый .lesson{height:100%}: при 2+ занятиях в
+                   ячейке карточки встают стопкой и не накладываются */
+  display: flex; flex-direction: column; justify-content: center;
+}
+/* Пол высоты — только одиночной карточке: у стопки из 2+ занятий (подгруппы)
+   он сложился бы дважды и растянул строку вдвое.
+   Берём БОЛЬШЕЕ из двух: заданная высота строки и то, что реально нужно тексту —
+   пять строк карточки (вид, дисциплина, аудитория, группы, преподаватель) при
+   текущем размере шрифта плюс её собственные поля (6+6). Высота строки и размер
+   шрифта настраиваются независимо («Оформление»), поэтому одну сверяем с другим:
+   иначе крупный шрифт в низкой строке упирается в край ячейки. */
+#guestRoot table.grid:not(.semester):not(.dept-grid) .lesson:not(.event):only-child,
+#gridWrap table.grid:not(.semester) .lesson:not(.event):only-child {
+  min-height: max(calc(var(--grid-row-h) - 8px), calc(var(--grid-font) * 1.35 * 5 + 12px));
+}
+
+/* Гостевая неделя: короткая карточка (мероприятие «Отп»/«ЭкзС», СР, маркеры)
+   не должна выглядеть мельче соседей по строке — карточка-одиночка тянется на
+   всю высоту строки. height:100% у ребёнка td срабатывает, только если у самой
+   ячейки высота «сколько получится» (height:1px), поэтому минимум строки держит
+   не td, а tr. Стопка из 2+ карточек (подгруппы) остаётся auto и не растёт.
+   Вид «Кафедра» (.dept-grid) из этого исключён: там строк вчетверо больше
+   (по 4 на каждого преподавателя), и фиксированная высота растягивала бы
+   таблицу кафедры на тысячи пикселей. Там строки — по содержимому. */
+#guestRoot table.grid:not(.semester):not(.summary):not(.dept-grid) tr { height: var(--grid-row-h); }
+#guestRoot table.grid:not(.semester):not(.summary):not(.dept-grid) td.slot { height: 1px; }
+#guestRoot table.grid:not(.semester):not(.summary):not(.dept-grid) .lesson:only-child { height: 100%; }
+
+/* Drag & drop переноса */
+.lesson[draggable="true"] { cursor: grab; }
+.lesson.dragging { opacity: 0.4; }
+/* Занятие, которое переносят кликом (кнопка ⇄ в перечне): затемнено и обведено —
+   при перетаскивании курсор сам показывает источник, а здесь нужен якорь. */
+.lesson.moving {
+  filter: brightness(0.7) saturate(0.7);
+  outline: 2px solid var(--grid-line);
+  outline-offset: -2px;
+}
+/* Цель переноса: зелёная заливка — свободны и слот, и аудитория; жёлтая —
+   слот свободен, но аудитория занята (поставить можно, будет предупреждение). */
+table.grid td.slot.free-target {
+  background: var(--cell-target-bg);
+  outline: 2px solid var(--grid-line-free); outline-offset: -3px; cursor: copy;
+}
+table.grid td.slot.free-target.room-busy {
+  background: var(--cell-target-busy-bg);
+  outline: 2px dashed var(--grid-line-warn);
+}
+
+/* Режим ручной блокировки свободных ячеек (расписание преподавателя) —
+   отдельный цвет (на основе --destructive), чтобы не путать с целью переноса. */
+table.grid td.slot.block-target {
+  background: color-mix(in srgb, var(--destructive) 22%, var(--card));
+  outline: 2px dashed var(--destructive); outline-offset: -3px; cursor: crosshair;
+}
+
+/* Контекстное меню занятия (ПКМ: копировать/удалить) */
+.ctx-menu {
+  position: fixed; z-index: 1000; min-width: 170px; padding: 4px;
+  background: var(--popover); color: var(--popover-foreground);
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); display: none;
+}
+.ctx-menu.open { display: block; }
+.ctx-menu button {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  width: 100%; text-align: left; padding: 7px 10px; border: 0; background: none;
+  font: inherit; font-size: 14px; color: inherit; cursor: pointer;
+  border-radius: calc(var(--radius) - 0.4rem);
+}
+.ctx-menu button:hover { background: var(--accent); color: var(--accent-foreground); }
+.ctx-menu .hk { color: var(--muted-foreground); font-size: 12px; }
+/* Свободный слот в сводном (аудитории и группы): без заливки — только зелёная обводка. */
+td.slot.slot-free { outline: 2px solid var(--grid-line-free); outline-offset: -3px; }
+/* Ячейка, которой при расстановке СР не хватило аудитории — красная подсветка. */
+table.grid td.slot.sr-unplaced { background: var(--cell-busy-bg); outline: 2px solid var(--grid-line-error); outline-offset: -3px; }
+/* Ячейка прямо под курсором при перетаскивании — самая насыщенная. Второй
+   селектор нужен, чтобы перебить более специфичное правило .free-target.room-busy. */
+table.grid td.slot.drag-over,
+table.grid td.slot.free-target.room-busy.drag-over { background: var(--cell-active-bg); }
+.room-pick { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+.room-opt {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem);
+  background: var(--secondary); color: var(--secondary-foreground); cursor: pointer; font-size: 14px;
+}
+.room-opt:hover { border-color: var(--ring); }
+.room-opt.selected { border-color: var(--ring); background: var(--accent); }
+.room-opt .cap { font-size: 12px; color: var(--muted-foreground); }
+/* Кнопки-подсказки размещения (наследуют вид .room-opt). */
+button.room-opt.sr-act { width: 100%; text-align: left; font-family: inherit; gap: 12px; }
+button.room-opt.sr-act .cap { white-space: normal; }
+.room-opt.no-fit { opacity: 0.6; }
+.room-opt .bad { color: var(--destructive); }
+/* «нужно N мест» рядом с выбором аудитории в форме добавления занятия. */
+.al-need { font-weight: 400; font-size: 12px; color: var(--muted-foreground); }
+.al-need.bad { color: var(--destructive); font-weight: 600; }
+/* Потребность в местах в окне выбора аудитории при переносе. */
+.need-seats { font-size: 14px; }
+/* Кнопка удаления строки в таблице «Дисциплины и преподаватели». */
+.subjects-table th.subj-del, .subjects-table td.subj-del { width: 34px; text-align: center; padding: 2px; }
+.subj-del-btn {
+  width: 24px; height: 24px; line-height: 1; padding: 0;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.4rem);
+  background: var(--secondary); color: var(--muted-foreground);
+  font-size: 15px; cursor: pointer;
+}
+.subj-del-btn:hover { background: var(--destructive); color: var(--destructive-foreground); border-color: transparent; }
+
+/* Модалки */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: none; align-items: center; justify-content: center; padding: 20px; z-index: 50;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 22px; width: 100%; max-width: 460px; box-shadow: var(--shadow-md);
+  max-height: 90vh; overflow: auto;
+}
+.modal h3 { margin: 0 0 14px; font-size: 17px; }
+.modal .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.modal .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.al-groups { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto; padding: 8px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem); background: var(--input); }
+/* Группы в карточке занятия: один курс — один столбец, столбцы переносятся без
+   собственной прокрутки списка. */
+#dGroups { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; max-height: none; overflow: visible; }
+
+/* Списки учебных групп разбиты на блоки по курсам. Заголовок блока — чекбокс:
+   отмечает/снимает весь курс (crs-all). Общая разметка для карточки занятия,
+   формы добавления, примечаний к дате, фильтра сводного и вида «Дисциплина». */
+.crs-block { display: flex; flex-direction: column; gap: 2px; }
+.crs-block + .crs-block { margin-top: 6px; }
+.crs-head {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted-foreground); padding: 2px 0;
+}
+.crs-head input { width: auto; }
+.crs-head:hover { color: var(--foreground); }
+.crs-n { opacity: 0.7; }
+/* Группы внутри блока — с небольшим отступом, чтобы курс читался как заголовок. */
+.crs-block .chk-lbl,
+.crs-block .pick-item { padding-left: 14px; }
+
+/* Карточка занятия: шире и с фиксированными «шапкой» и «подвалом». Скроллится
+   только содержимое (.modal-body) — заголовок и кнопки видны всегда, примечание
+   полностью доступно прокруткой, мотать всё окно не нужно. */
+#detailsModal .modal {
+  max-width: 620px; display: flex; flex-direction: column;
+  max-height: 90vh; overflow: hidden;
+}
+#detailsModal .modal-body { overflow-y: auto; flex: 1 1 auto; padding-right: 4px; margin-right: -4px; }
+#detailsModal .actions { flex: 0 0 auto; padding-top: 14px; border-top: 1px solid var(--border); }
+
+
+/* Кнопка закрытия — жёстко зафиксирована в правом верхнем углу экрана
+   (position: fixed). Не сдвигается ни при прокрутке содержимого окна, ни при
+   прокрутке страницы — всегда в одном и том же месте. */
+.modal-close {
+  order: 2; align-self: flex-start; margin-left: 12px; flex: none;
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card); color: var(--card-foreground);
+  font-size: 26px; line-height: 1; cursor: pointer; box-shadow: var(--shadow-md);
+  transition: background 0.15s, transform 0.15s;
+}
+.modal-close:hover { background: var(--secondary); transform: scale(1.05); }
+.modal-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Буфер занятий — узкая вертикальная полоса справа (≤5% ширины) */
+.buffer {
+  border-left: 1px dashed var(--border); background: var(--card);
+  padding: 8px 5px; display: flex; flex-direction: column; gap: 8px;
+  overflow-y: auto; overflow-x: hidden; min-width: 0;
+  max-height: calc(100vh - 61px); position: sticky; top: 61px;
+  transition: border-color .15s, background .15s;
+}
+.buffer.free-buffer { border-left-color: var(--primary); }
+.buffer.drag-over { border-left-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
+.buffer-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.buffer-title {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.buffer-toggle {
+  flex: none; background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted-foreground); cursor: pointer; font-size: 12px; line-height: 1; padding: 3px 5px;
+}
+.buffer-toggle:hover { border-color: var(--primary); color: var(--foreground); }
+/* Свёрнутый буфер: тонкая полоса с одной кнопкой */
+.admin-layout.buffer-collapsed .buffer { padding: 8px 4px; }
+.admin-layout.buffer-collapsed .buffer-head { justify-content: center; border-bottom: none; padding-bottom: 0; }
+.admin-layout.buffer-collapsed .buffer-title,
+.admin-layout.buffer-collapsed #bufferClear,
+.admin-layout.buffer-collapsed .buffer-list { display: none; }
+.buffer-list { display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+.buffer-empty { color: var(--muted-foreground); font-size: 9px; text-align: center; line-height: 1.3; }
+.buffer-list .lesson {
+  width: 100%; margin: 0; cursor: grab; text-align: center; overflow: hidden;
+  padding: 5px 3px; border-radius: calc(var(--radius) - .4rem);
+}
+.buffer-list .lesson .bc-subj { font-size: 11px; font-weight: 600; line-height: 1.15; word-break: break-word; }
+.buffer-list .lesson .bc-type { font-size: 9px; color: var(--muted-foreground); }
+/* Карточка занятия: подробные данные */
+.details { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 16px; }
+.details dt { font-size: 12px; color: var(--muted-foreground); align-self: center; }
+.details dd { margin: 0; font-size: 14px; color: var(--foreground); }
+/* Правка поля прямо в карточке занятия (гостевая страница) — компактнее
+   обычного поля ввода, чтобы строки списка «подпись — значение» не разъезжались. */
+.details .lm-inp { padding: 4px 8px; font-size: 14px; }
+.modal label.lbl { display: block; margin: 10px 0 4px; }
+/* Свёрнутый список доп. преподавателей: заголовок выглядит как подпись поля, но
+   кликабелен. display не переопределяем — иначе пропадает нативный треугольник. */
+#dExtraWrap > summary { font-size: 12px; color: var(--muted-foreground); cursor: pointer; margin: 10px 0 4px; }
+#dExtraWrap > summary:hover { color: var(--foreground); }
+/* Плашка «перенесено» в карточке занятия. */
+.moved-banner {
+  margin: 0 0 12px; padding: 8px 12px;
+  border-radius: calc(var(--radius) - 0.3rem);
+  background: color-mix(in srgb, var(--chart-4) 18%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--chart-4) 40%, transparent);
+  border-left: 3px solid var(--primary);
+  font-size: 13px; color: var(--foreground);
+}
+.reasons { color: var(--destructive); font-size: 13px; margin-top: 10px; }
+.reasons ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* Панель ошибок */
+.errors-panel { margin-top: 20px; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; background: var(--card); }
+.errors-panel h3 { margin: 0 0 10px; font-size: 15px; }
+.err-item { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.err-item:last-child { border-bottom: none; }
+.err-badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; margin-right: 6px; background: var(--destructive); color: var(--destructive-foreground); }
+.err-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.err-head h3 { margin: 0; }
+.err-hint { font-size: 12px; color: var(--muted-foreground); margin: 4px 0 10px; }
+
+/* Полоса «Не размещённые при импорте» под сеткой (см. admin.html). */
+.orphan-panel { border-color: var(--warning, var(--border)); }
+.orphan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.orphan-head h3 { margin: 0; }
+.orphan-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.orphan-list .lesson { width: 150px; padding: 6px 8px; cursor: grab; }
+.orphan-list .lesson .oc-sub { font-size: 12px; font-weight: 600; line-height: 1.2; }
+.orphan-list .lesson .oc-meta { font-size: 10px; color: var(--muted-foreground); line-height: 1.3; }
+
+/* Кандидаты «разные сокращения одной дисциплины» */
+.err-aliases { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ac-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.ac-where { flex-basis: 100%; font-size: 12px; color: var(--muted-foreground); }
+.ac-opt { font-size: 13px; cursor: pointer; }
+.ac-apply { margin-left: auto; }
+
+/* Подсветка ячеек с ошибками (после «Проверить ошибки») */
+.lesson.has-error {
+  outline: 2px solid var(--destructive);
+  outline-offset: -2px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 30%, transparent);
+}
+/* Перечень занятий преподавателя (свёрнутый список под сеткой семестра) */
+.lessons-list { margin-top: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 10px 14px; }
+.lessons-list > summary { cursor: pointer; font-size: 15px; font-weight: 700; }
+.lessons-list > summary::marker { color: var(--muted-foreground); }
+table.tl-table { table-layout: auto; width: 100%; margin-top: 10px; }
+table.tl-table th, table.tl-table td { padding: 4px 8px; font-size: 12px; white-space: nowrap; text-align: left; }
+table.tl-table th { background: var(--secondary); color: var(--secondary-foreground); position: sticky; top: 0; }
+table.tl-table tbody tr:hover td { background: color-mix(in srgb, var(--primary) 7%, var(--card)); }
+/* Шапка в одну строку: название + стрелка, как автофильтр в Excel. */
+table.tl-table th.tl-th { white-space: nowrap; }
+table.tl-table th.tl-th.tl-on { color: var(--primary); }
+table.tl-table .tl-menu {
+  margin-left: 4px; padding: 0 4px; border: 1px solid transparent; border-radius: 4px;
+  background: none; color: inherit; cursor: pointer; font-size: 11px; line-height: 1.4;
+}
+table.tl-table .tl-menu:hover { border-color: var(--border); background: var(--card); }
+/* Окно столбца: сортировка, поиск и список значений с галочками. */
+.tl-pop {
+  position: fixed; z-index: 1002; width: 250px; padding: 8px;
+  background: var(--popover); color: var(--popover-foreground);
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem);
+  box-shadow: var(--shadow-md); font-size: 12px;
+}
+.tl-pop-sort { display: flex; flex-direction: column; gap: 4px; }
+.tl-pop-sort .btn { justify-content: flex-start; text-align: left; }
+.tl-pop-q { width: 100%; margin: 8px 0 6px; font-size: 12px; padding: 3px 6px; }
+.tl-pop-list { max-height: 190px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; padding: 4px; }
+.tl-pop-v { display: flex; align-items: center; gap: 6px; padding: 2px 4px; cursor: pointer; }
+.tl-pop-v:hover { background: var(--accent); color: var(--accent-foreground); }
+.tl-pop-acts { margin-top: 8px; display: flex; justify-content: flex-end; }
+/* Поля правки прямо в строке (вид занятия, тема, примечание). Текст в них должен
+   выглядеть ровно как в обычных ячейках: шрифт и цвет наследуются, поле занимает
+   всю ячейку, а её собственный padding обнулён — иначе отступ удваивался бы.
+   3px/7px + рамка 1px дают те же 4px/8px, что и у остальных ячеек. */
+table.tl-table td.tl-ed { padding: 0; min-width: 90px; }
+table.tl-table .tl-inp {
+  width: 100%; box-sizing: border-box; padding: 3px 7px; margin: 0;
+  font: inherit; color: inherit; text-align: inherit; letter-spacing: inherit;
+  background: transparent; border: 1px solid transparent; border-radius: 0;
+}
+table.tl-table .tl-inp:hover { border-color: var(--border); }
+table.tl-table .tl-inp:focus { border-color: var(--ring); background: var(--input); outline: none; }
+/* Строка занятия, которое сейчас переносят. */
+table.tl-table tr.tl-moving td { background: color-mix(in srgb, var(--grid-line) 18%, var(--card)); }
+/* Вид «Преподаватели»: строка-заголовок кафедры, длинный список дисциплин,
+   галочки об изменениях. Остальное берётся от tl-table. */
+table.tchr-table tr.tchr-dept td {
+  background: color-mix(in srgb, var(--primary) 12%, var(--card));
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+table.tchr-table tr.tchr-dept:hover td { background: color-mix(in srgb, var(--primary) 20%, var(--card)); }
+table.tchr-table .tchr-caret { display: inline-block; width: 12px; }
+table.tchr-table td.tchr-subj { white-space: normal; max-width: 520px; }
+table.tchr-table td.tchr-moved { text-align: center; font-weight: 600; }
+/* Есть изменения в расписании — вся строка зелёная (в т.ч. при наведении). */
+table.tchr-table tr.tchr-changed td,
+table.tchr-table tbody tr.tchr-changed:hover td {
+  background: color-mix(in srgb, var(--success) 22%, var(--card));
+}
+
+table.tl-table td.tl-acts { white-space: nowrap; }
+table.tl-table td.tl-acts .btn { padding: 2px 7px; font-size: 12px; margin-left: 2px; }
+
+/* Окно «Оформление сетки»: строки «подпись — поле» в две колонки */
+.app-section { margin-top: 14px; font-size: 13px; }
+.app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 14px; margin-top: 6px; }
+.app-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.app-row input[type="color"] { width: 44px; height: 26px; padding: 0; border: 1px solid var(--border); background: none; cursor: pointer; }
+.app-row input[type="number"] { width: 80px; }
+
+/* Подбор аудиторий: занятие, которому предложена другая аудитория (жёлтым —
+   аудитория не по размеру группы) и пары преподавателя, идущие подряд в разных
+   аудиториях (синим — их предлагается собрать в одну). */
+/* Заливка целиком, а не только обводка: подсказка должна читаться с одного
+   взгляда по всей сетке. Правила идут ПОСЛЕ окраски по виду занятия и форм
+   контроля, поэтому перекрывают их, пока включён подбор. */
+.lesson.room-waste,
+.lesson.room-dept,
+.lesson.room-cc,
+.lesson.room-ctrl,
+.lesson.room-teacher {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+.lesson.room-waste {
+  background: color-mix(in srgb, var(--grid-line-warn) 38%, var(--card));
+  outline-color: var(--grid-line-warn);
+}
+.lesson.room-teacher {
+  background: color-mix(in srgb, var(--grid-line-teacher) 38%, var(--card));
+  outline-color: var(--grid-line-teacher);
+}
+/* Заливаем и саму ячейку: карточка не всегда занимает её целиком, иначе по краям
+   остаётся полоска фона таблицы. Класс ставит applyRoomPlanMarks. */
+table.grid td.slot.cell-waste { background: color-mix(in srgb, var(--grid-line-warn) 38%, var(--card)); }
+.lesson.room-dept {
+  background: color-mix(in srgb, var(--grid-line-dept) 34%, var(--card));
+  outline-color: var(--grid-line-dept);
+}
+table.grid td.slot.cell-teacher { background: color-mix(in srgb, var(--grid-line-teacher) 38%, var(--card)); }
+table.grid td.slot.cell-dept { background: color-mix(in srgb, var(--grid-line-dept) 34%, var(--card)); }
+.lesson.room-cc {
+  background: color-mix(in srgb, var(--grid-line-cc) 34%, var(--card));
+  outline-color: var(--grid-line-cc);
+}
+table.grid td.slot.cell-cc { background: color-mix(in srgb, var(--grid-line-cc) 34%, var(--card)); }
+.lesson.room-ctrl {
+  background: color-mix(in srgb, var(--grid-line-ctrl) 34%, var(--card));
+  outline-color: var(--grid-line-ctrl);
+}
+table.grid td.slot.cell-ctrl { background: color-mix(in srgb, var(--grid-line-ctrl) 34%, var(--card)); }
+.opt-why {
+  display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+  background: color-mix(in srgb, var(--grid-line-warn) 22%, var(--card));
+}
+.opt-why-teacher { background: color-mix(in srgb, var(--grid-line-teacher) 22%, var(--card)); }
+.opt-why-dept { background: color-mix(in srgb, var(--grid-line-dept) 22%, var(--card)); }
+.opt-why-cc { background: color-mix(in srgb, var(--grid-line-cc) 22%, var(--card)); }
+.opt-why-ctrl { background: color-mix(in srgb, var(--grid-line-ctrl) 22%, var(--card)); }
+/* Окно настроек подбора: строка правила — галочка и стрелки приоритета. */
+.rp-rules { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.rp-rule { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rp-rule .rp-move { display: flex; gap: 4px; flex: 0 0 auto; }
+.rp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.rp-grid label {
+  display: flex; flex-direction: column; gap: 3px; align-items: stretch;
+  font-size: 12px; font-weight: 400; color: var(--muted-foreground);
+}
+.rp-grid input, .rp-grid select { width: 100%; }
+.rp-pairs { font-size: 12px; color: var(--muted-foreground); margin-bottom: 10px; }
+/* Разгрузка 4-й пары: занятие, для которого нашлось свободное окно (и чужая
+   пара, которую ради него предлагается сдвинуть). Показывается в расписании
+   группы, где подбор аудиторий не работает, поэтому цвет переиспользуем. */
+.lesson.relief-src {
+  background: color-mix(in srgb, var(--grid-line-warn) 38%, var(--card));
+  outline: 2px solid var(--grid-line-warn);
+  outline-offset: -2px;
+}
+.rel-chain { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+  background: color-mix(in srgb, var(--grid-line-teacher) 22%, var(--card)); }
+.ot-steps { display: block; margin-top: 3px; color: var(--muted-foreground); font-size: 11px; }
+.opt-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Окно подбора на самой ячейке. В отличие от окна ошибки — кликабельное
+   (в нём кнопки «Выполнить»/«Пропустить»), поэтому без pointer-events: none. */
+.opt-tip {
+  position: fixed; z-index: 1001; max-width: 380px;
+  background: var(--popover); color: var(--popover-foreground);
+  border: 1px solid var(--grid-line-warn); border-radius: var(--radius);
+  box-shadow: var(--shadow-md); padding: 10px 12px; font-size: 12px; line-height: 1.45;
+}
+.ot-head { font-weight: 700; }
+.ot-now { color: var(--muted-foreground); margin: 2px 0 8px; }
+.ot-opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; }
+.ot-opt + .ot-opt { border-top: 1px solid var(--border); }
+.ot-acts { margin-top: 8px; display: flex; justify-content: flex-end; }
+.opt-table select.opt-var, .opt-table select.rel-var { max-width: 420px; font-size: 12px; padding: 3px 6px; }
+.opt-table-wrap { overflow-x: auto; }
+.opt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.opt-table th, .opt-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.opt-table th { color: var(--muted-foreground); font-weight: 600; }
+.opt-table tr:last-child td { border-bottom: none; }
+
+/* Всплывающее окно с ошибкой и подсказкой по исправлению */
+.err-tooltip {
+  position: fixed; z-index: 1000; max-width: 340px;
+  background: var(--card); color: var(--foreground);
+  border: 1px solid var(--destructive); border-radius: var(--radius);
+  box-shadow: var(--shadow-md); padding: 9px 11px; font-size: 12px; line-height: 1.45;
+  pointer-events: none;
+}
+.et-item + .et-item { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+.et-detail { font-weight: 600; color: var(--destructive); }
+.et-sug { margin-top: 3px; color: var(--foreground); }
+/* Описание занятия в окне ошибки (показывается вместе с причиной/подсказкой). */
+.et-info { color: var(--muted-foreground); }
+/* Ссылка-переход к занятию из списка ошибок. */
+.err-jump { color: var(--primary); text-decoration: underline; cursor: pointer; }
+.err-jump:hover { text-decoration: none; }
+/* Кратковременная подсветка ячейки/карточки при переходе из списка ошибок. */
+@keyframes cellFlash {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  20%      { box-shadow: 0 0 0 3px var(--primary); }
+}
+.flash { animation: cellFlash 1s ease-in-out 2; border-radius: var(--radius); }
+
+/* Переселённые занятия (после вывода аудитории из эксплуатации) — подсветка до
+   обновления страницы, чтобы наглядно видеть, что и куда переехало. */
+.lesson.relocated {
+  outline: 2px dashed var(--chart-1);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--chart-1) 22%, var(--card));
+}
+
+/* Плашка режима выбора свободной ячейки в сетке */
+.pick-banner {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; z-index: 55;
+  background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--ring); border-radius: 999px;
+  padding: 8px 10px 8px 16px; box-shadow: var(--shadow-md); font-size: 14px;
+}
+
+/* Тост */
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: calc(var(--radius) - 0.3rem);
+  padding: 12px 16px; box-shadow: var(--shadow-md); font-size: 14px; opacity: 0; transform: translateY(8px);
+  transition: 0.2s; pointer-events: none; max-width: 360px; z-index: 60; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { border-left-color: var(--destructive); }
+.ref-list { display: flex; flex-direction: column; gap: 8px; }
+/* Справочники шире, чтобы помещались все поля (имя, кафедра, курс, вместимость). */
+#refModal .modal { max-width: 640px; }
+.ref-row { display: grid; grid-template-columns: 1fr 130px 90px auto; gap: 10px; align-items: center; }
+/* Строка аудитории с доп. полем «только для курса». */
+.ref-row.with-course { grid-template-columns: 1fr 120px 64px 84px auto; }
+/* У аудиторий есть ещё столбец «Примечание» (оснащение). */
+.ref-row.with-note { grid-template-columns: 1fr 110px minmax(120px, 1.2fr) 60px 80px auto; }
+.room-note { color: var(--muted-foreground); font-size: 11px; }
+.ref-add.with-course { grid-template-columns: 1fr 120px 64px 84px auto; }
+.ref-row span { font-size: 13px; }
+/* Заголовок курса в справочнике групп — только подпись, ничего не выбирает. */
+.ref-course-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); margin-top: 4px; }
+.ref-row.hidden-ent span { color: var(--muted-foreground); text-decoration: line-through; }
+.ref-add { display: grid; grid-template-columns: 1fr 130px 90px auto; gap: 10px; align-items: center; margin-bottom: 6px; }
+.ref-add .btn { white-space: nowrap; }
+.vis-toggle {
+  border: 1px solid var(--border); background: var(--secondary); color: var(--secondary-foreground);
+  border-radius: calc(var(--radius) - 0.3rem); cursor: pointer; font-size: 14px;
+  padding: 7px 9px; line-height: 1;
+}
+.vis-toggle:hover { border-color: var(--ring); }
+.vis-toggle.is-hidden { background: var(--muted); color: var(--muted-foreground); }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.tab { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--secondary); color: var(--secondary-foreground); cursor: pointer; font-size: 13px; }
+.tab.active { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+.tab:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Режимы отображения + семестровая сетка */
+.view-modes { display: flex; gap: 6px; align-items: center; }
+/* Выбор содержимого сводного (группы/аудитории) рядом с вкладками. */
+.summary-kind { width: auto; padding: 6px 10px; border-radius: 999px; font-size: 13px; }
+.muted-hint { color: var(--muted-foreground); font-weight: 400; font-size: 11px; }
+/* Фильтр столбцов сводного: нативный <details> вместо самодельного дропдауна. */
+.grp-filter { position: relative; }
+.grp-filter > summary { list-style: none; cursor: pointer; white-space: nowrap; }
+.grp-filter > summary::-webkit-details-marker { display: none; }
+.grp-filter-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 260px;
+  max-height: 60vh; overflow: auto; padding: 10px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--card); box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+}
+.grp-filter-acts { display: flex; gap: 6px; margin-bottom: 8px; }
+.grp-filter-list { display: flex; flex-direction: column; gap: 2px; }
+/* Сетка занимает полную высоту: прокручивается вся страница, а не внутренний блок,
+   поэтому всё расписание помещается. Горизонталь — на уровне страницы для широких таблиц. */
+.grid-scroll { overflow: visible; max-height: none; }
+table.grid.semester { table-layout: auto; min-width: 100%; }
+/* Основная семестровая сетка (без .summary — это свод по группам) всегда
+   вписывается в ширину экрана: фиксированная раскладка + width:100% распределяет
+   недели по доступной ширине, содержимое ячеек переносится вместо прокрутки. */
+table.grid.semester:not(.summary) { table-layout: fixed; width: 100%; max-width: 100%; min-width: 0; }
+table.grid.semester th, table.grid.semester td { padding: 0; }
+table.grid.semester thead th { font-size: 11px; padding: 4px 5px; white-space: nowrap; }
+table.grid.semester .day-col { width: 30px; text-align: center; background: var(--secondary); color: var(--secondary-foreground); font-weight: 700; position: relative; z-index: 2; }
+/* «День» в шапке шире столбца в 30px (он рассчитан на «Пн») — уменьшаем
+   надпись и разрешаем перенос, иначе слово вылезает на соседний столбец. */
+table.grid.semester thead th.day-col { font-size: 10px; padding: 2px 1px; overflow-wrap: anywhere; }
+table.grid.semester .pair-col { width: 70px; background: var(--muted); color: var(--muted-foreground); font-size: 11px; text-align: center; padding: 3px; white-space: nowrap; }
+table.grid.semester td.slot { height: auto; min-width: 0; padding: 2px; overflow: hidden; }
+table.grid.semester .lesson { font-size: 10px; line-height: 1.2; padding: 2px 3px; border-radius: 4px; overflow: hidden; }
+/* В узких колонках недель содержимое карточки переносим, а не обрезаем/растягиваем. */
+table.grid.semester .lesson.src .l1,
+table.grid.semester .lesson.src .l2,
+table.grid.semester .lesson.src .l3,
+table.grid.semester .lesson.src .l4 { white-space: normal; overflow-wrap: anywhere; }
+table.grid.semester .wk-head { writing-mode: initial; }
+
+/* Даты идут отдельной строкой над парами дня — как в бумажном образце. Строка
+   служебная: в неё нельзя перетаскивать занятия (нет td.slot). */
+table.grid.semester tr.date-row td { background: var(--muted); color: var(--muted-foreground); }
+table.grid.semester .date-cell { font-size: 10px; font-weight: 700; text-align: center; padding: 1px 2px; white-space: nowrap; }
+table.grid.semester .date-label { font-size: 10px; font-weight: 700; }
+
+table.grid.summary .grp-head { min-width: 96px; font-size: 12px; white-space: nowrap; }
+table.grid.summary .grp-head small { color: var(--muted-foreground); font-weight: 400; }
+
+/* Свод по группам с динамической шириной: столбцы делят ширину поровну (table-layout:
+   fixed), шрифт берётся из --sum-fs/--sum-hs (задаются в JS по числу групп). Так все
+   группы всегда помещаются по ширине без горизонтальной прокрутки. */
+table.grid.semester.summary.gsum { table-layout: fixed; width: 100%; max-width: 100%; min-width: 0; }
+table.grid.summary.gsum .grp-head { min-width: 0; font-size: var(--sum-hs, 12px); white-space: normal; overflow-wrap: anywhere; }
+/* День и дата — тем же шрифтом, что и шапка групп: столбец узкий (30px), а
+   «Чт 03.09» набранное базовым кеглем вылезало на соседние столбцы. */
+table.grid.summary.gsum .day-col,
+table.grid.summary.gsum .day-col .cell-date { font-size: var(--sum-hs, 12px); white-space: normal; overflow-wrap: anywhere; }
+table.grid.summary.gsum td.slot { overflow: hidden; min-width: 0; }
+table.grid.summary.gsum .lesson { font-size: var(--sum-fs, 10px); }
+table.grid.summary.gsum .lesson .l1,
+table.grid.summary.gsum .lesson .l2,
+table.grid.summary.gsum .lesson .l3,
+table.grid.summary.gsum .lesson .l4 { white-space: normal; overflow-wrap: anywhere; }
+
+/* 4-строчная ячейка: вид / дисциплина / аудитория / преподаватель (порядок фиксирован,
+   поле, очевидное из текущего представления, заменяется на список групп). */
+.lesson.src { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0; }
+.lesson.src .l1, .lesson.src .l3, .lesson.src .l4 { font-size: 9px; opacity: 0.8; white-space: nowrap; }
+.lesson.src .l2 { font-weight: 700; font-size: 11px; }
+
+/* Сводное (гостевой просмотр И админка): карточка занятия на всю высоту ячейки.
+   У td.slot семестра height:auto, поэтому height:100% карточки не к чему
+   привязать — даём ячейке seed-высоту (1px). Строки таблицы и так выравнивают
+   ячейки по высоте, и height:100% растягивает карточку до реальной высоты ячейки.
+
+   ВАЖНО: базовый `.lesson { height: 100% }` применяется ко ВСЕМ карточкам. С
+   seed-высотой он начинает срабатывать и для нескольких занятий в одной ячейке
+   (подгруппы/поток) — каждая тянется на всю высоту, и при overflow:hidden
+   верхняя перекрывает нижнюю. Поэтому по умолчанию сбрасываем карточку в
+   height:auto (стопкой, обе видны), и только ЕДИНСТВЕННУЮ (:only-child)
+   растягиваем на всю ячейку + центрируем текст. */
+#guestRoot table.grid.summary td.slot,
+#gridWrap table.grid.summary td.slot { height: 1px; }
+#guestRoot table.grid.summary td.slot > .lesson.src,
+#gridWrap table.grid.summary td.slot > .lesson.src { height: auto; }
+#guestRoot table.grid.summary td.slot > .lesson.src:only-child,
+#gridWrap table.grid.summary td.slot > .lesson.src:only-child { height: auto; justify-content: center; }
+
+/* Мероприятие (ОП, Экз, Отп…) — не занятие: своя заливка, во всю ячейку.
+   Карточка позиционируется абсолютно (inset:0), поэтому заполняет РЕАЛЬНУЮ
+   высоту ячейки (даже когда строку растянули соседние занятия), а текст —
+   строго по центру. Сразу видно, что слот занят и заблокирован. */
+td.slot.slot-event { padding: 0; position: relative; }
+.lesson.event {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--chart-2) 40%, var(--card));
+  color: var(--foreground);
+  border: 1px dashed color-mix(in srgb, var(--chart-2) 75%, var(--border));
+}
+.lesson.event:hover { border-color: var(--chart-2); }
+/* 3 строки, как у занятия: вид/т и аудитория мельче, метка (дисциплина) — крупно. */
+.lesson.event .l1, .lesson.event .l3 { font-size: 9px; opacity: 0.8; white-space: nowrap; }
+.lesson.event .l2 { font-weight: 700; font-size: 11px; font-style: italic; }
+.lesson.event .event-label { font-weight: 700; font-size: 12px; font-style: italic; text-align: center; }
+/* Разные виды мероприятий — разные заливки (тот же стиль, другие цвета). */
+.lesson.event.ev-otp { background: color-mix(in srgb, var(--chart-1) 42%, var(--card)); border-color: color-mix(in srgb, var(--chart-1) 75%, var(--border)); }
+.lesson.event.ev-op { background: color-mix(in srgb, var(--destructive) 28%, var(--card)); border-color: color-mix(in srgb, var(--destructive) 62%, var(--border)); }
+.lesson.event.ev-umo { background: color-mix(in srgb, var(--chart-5) 40%, var(--card)); border-color: color-mix(in srgb, var(--chart-5) 72%, var(--border)); }
+.lesson.event.ev-practice { background: color-mix(in srgb, var(--primary) 26%, var(--card)); border-color: color-mix(in srgb, var(--primary) 58%, var(--border)); }
+.lesson.event.ev-off { background: color-mix(in srgb, var(--muted-foreground) 22%, var(--card)); border-color: color-mix(in srgb, var(--muted-foreground) 45%, var(--border)); }
+.lesson.event.ev-exam { background: color-mix(in srgb, var(--chart-2) 42%, var(--card)); border-color: color-mix(in srgb, var(--chart-2) 75%, var(--border)); }
+.lesson.event.ev-other { background: color-mix(in srgb, var(--chart-4) 34%, var(--card)); border-color: color-mix(in srgb, var(--chart-4) 65%, var(--border)); }
+.lesson.event.ev-op:hover { border-color: var(--destructive); }
+.lesson.event.ev-otp:hover { border-color: var(--chart-1); }
+.lesson.event.ev-umo:hover { border-color: var(--chart-5); }
+.lesson.event.ev-practice:hover { border-color: var(--primary); }
+.lesson.event.ev-other:hover { border-color: var(--chart-4); }
+
+/* Если в ячейке с мероприятием сверху показана дата (первая пара дня в
+   семестровом виде) — не перекрываем её: дату поднимаем над карточкой, а саму
+   карточку мероприятия сдвигаем ниже строки даты. */
+td.slot.slot-event .cell-date { position: relative; z-index: 1; }
+
+/* Журнал переносов */
+.log-page { padding: 24px; width: 100%; margin: 0; overflow-x: auto; }
+.log-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.log-head h1 { font-size: 20px; margin: 0; }
+.log-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.log-search { padding: 8px 12px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem); background: var(--card); color: var(--card-foreground); font-size: 13px; min-width: 220px; }
+.log-count { font-size: 13px; color: var(--muted-foreground); }
+.log-scroll { border: 1px solid var(--border); border-radius: var(--radius); }
+/* Таблица помещается в ширину окна: фиксированная раскладка + перенос текста,
+   без горизонтальной прокрутки. Доли столбцов заданы через colgroup в log.html. */
+table.log-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+table.log-table th, table.log-table td {
+  padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border);
+  vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+}
+table.log-table thead th { background: var(--secondary); color: var(--secondary-foreground); font-weight: 700; position: sticky; top: 0; font-size: 11px; }
+table.log-table tbody tr:hover { background: var(--muted); }
+table.log-table .nowrap { white-space: normal; }
+table.log-table .muted { color: var(--muted-foreground); font-size: 10px; }
+table.log-table .log-note {
+  width: 100%; padding: 5px 6px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem);
+  background: var(--input); color: var(--foreground); outline: none;
+}
+table.log-table .log-note:focus { border-color: var(--ring); }
+table.log-table .log-actions { display: flex; gap: 5px; align-items: center; }
+table.log-table .log-actions .btn { padding: 5px 7px; font-size: 13px; line-height: 1; }
+.log-empty { padding: 40px; text-align: center; color: var(--muted-foreground); }
+
+/* Заголовки-автофильтр: название = кнопка сортировки, воронка = фильтр */
+table.log-table thead th { z-index: 2; }
+.lh-cell { display: flex; align-items: flex-start; gap: 2px; justify-content: space-between; }
+.lh-label { flex: 1; min-width: 0; background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; font-weight: 700; color: inherit; text-align: left; cursor: pointer; }
+button.lh-label:hover { text-decoration: underline; }
+.lh-arrow { color: var(--primary); white-space: nowrap; }
+.lh-filter { flex-shrink: 0; background: none; border: 0; padding: 0 4px; cursor: pointer;
+  color: var(--muted-foreground); font-size: 22px; line-height: 1; }
+.lh-filter:hover { color: var(--foreground); }
+.lh-filter.active { color: var(--primary); }
+
+.log-filter { position: absolute; z-index: 1000; width: 240px; max-width: 92vw;
+  background: var(--card); color: var(--card-foreground); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  padding: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.log-filter .lf-search { width: 100%; padding: 6px 8px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem);
+  background: var(--input); color: var(--foreground); outline: none; }
+.log-filter .lf-search:focus { border-color: var(--ring); }
+.log-filter .lf-all { display: flex; align-items: center; gap: 6px; font-weight: 600;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.log-filter .lf-list { max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 1px; }
+.log-filter .lf-item { display: flex; align-items: center; gap: 6px; padding: 3px 4px;
+  border-radius: calc(var(--radius) - 0.4rem); cursor: pointer; }
+.log-filter .lf-item:hover { background: var(--muted); }
+.log-filter .lf-actions { display: flex; gap: 6px; justify-content: flex-end;
+  padding-top: 6px; border-top: 1px solid var(--border); }
+
+/* Память семестров (диалог настройки семестра) */
+.sem-saved { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; }
+.sem-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem); background: var(--card); }
+.sem-row.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
+.sem-info { font-size: 13px; }
+.sem-info .muted { color: var(--muted-foreground); font-size: 12px; }
+.sem-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sem-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); }
+
+/* Архив базы (версии всей базы с примечаниями) */
+.arc-create { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; margin: 12px 0; }
+.arc-create .btn { white-space: nowrap; }
+.arc-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; }
+/* Первая колонка фиксированной ширины: каждая строка — отдельный grid, и при
+   «auto» строки с меткой («авто»/«импорт») сдвигали бы поле примечания вправо
+   относительно соседних. */
+.arc-row { display: grid; grid-template-columns: 200px 1fr auto; gap: 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem); background: var(--card); }
+.arc-when { font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.arc-meta { color: var(--muted-foreground); font-size: 12px; }
+.arc-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.arc-empty { color: var(--muted-foreground); font-size: 13px; padding: 10px 0; }
+.arc-broken { color: var(--destructive); font-size: 12px; }
+/* Автоснимок «перед переключением» — служебная версия, приглушаем метку.
+   Рамка обязательна: в тёмной теме --secondary почти совпадает с --card,
+   без неё метка теряет форму и читается как обычный текст. */
+.arc-badge-auto { background: var(--secondary); color: var(--muted-foreground); border: 1px solid var(--border); }
+@media (max-width: 620px) {
+  .arc-row { grid-template-columns: 1fr; }
+}
+
+/* Нерабочие дни — подсветка в сетке расписания */
+th.holiday-day {
+  background: var(--cell-holiday-head-bg) !important;
+  color: var(--destructive);
+}
+td.holiday-col {
+  background: var(--cell-holiday-bg) !important;
+}
+.hol-label { color: var(--destructive); font-size: 9px; font-weight: 600; }
+/* Дата с примечанием (ПКМ по дате). Подсветка + уголок-закладка; сам текст —
+   в нативной подсказке (title) ячейки. */
+[data-date].has-note {
+  background: color-mix(in srgb, var(--primary) 18%, var(--card)) !important;
+  box-shadow: inset 0 0 0 1px var(--primary);
+  position: relative;
+  cursor: help;
+}
+[data-date].has-note::after {
+  content: '📝';
+  position: absolute;
+  top: 0;
+  right: 1px;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.85;
+}
+/* Подсветка потоковых занятий (флажок в «Действиях»). */
+body.highlight-streams .lesson.stream {
+  outline: 2px solid var(--grid-line-stream);
+  outline-offset: -2px;
+  background: var(--lesson-stream-bg);
+}
+.holiday-mark {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 32px; height: 100%;
+  color: var(--destructive); font-size: 12px; font-weight: 700; font-style: italic; opacity: 0.75;
+}
+
+/* Тепловая карта статистики нагрузки */
+.stats-view { padding: 4px 0; }
+.stats-tabs { margin-bottom: 12px; }
+/* Фильтр по кафедрам над таблицей статистики (выпадающий список с галочками). */
+.stats-filter { display: inline-block; margin: 8px 0; }
+.stats-filter > .grp-filter-pop { left: 0; right: auto; }
+
+.stats-table { width: max-content; border-collapse: collapse; font-size: 12px; }
+.stats-table th, .stats-table td {
+  border: 1px solid var(--border); padding: 4px 5px; text-align: center; white-space: nowrap;
+}
+.stats-table thead th {
+  background: var(--secondary); color: var(--secondary-foreground);
+  font-weight: 600;
+}
+.stats-name { text-align: left !important; min-width: 40px; }
+.stats-name-cell { text-align: left; min-width: 160px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; padding: 4px 8px !important; }
+.stats-week { min-width: 26px; width: 26px; }
+.stats-cell { min-width: 26px; color: var(--muted-foreground); font-size: 11px; }
+.stats-total { font-weight: 700; min-width: 46px; }
+.stats-total-cell { font-weight: 700; min-width: 46px; }
+.heat-1 { background: color-mix(in srgb, var(--chart-1) 22%, var(--card)); color: var(--foreground) !important; }
+.heat-2 { background: color-mix(in srgb, var(--chart-1) 46%, var(--card)); color: var(--foreground) !important; }
+.heat-3 { background: color-mix(in srgb, var(--chart-3) 60%, var(--card)); color: var(--foreground) !important; }
+.heat-4 { background: color-mix(in srgb, var(--chart-4) 80%, var(--card)); color: var(--primary-foreground) !important; }
+
+/* Подсветка занятий по аудитории или дисциплине.
+   В семестровом виде td.slot { overflow:hidden } обрезает box-shadow, поэтому
+   видимость держится на насыщенной заливке + сплошной обводке (не только тени). */
+.lesson.hl {
+  border-color: var(--hl-color);
+  outline: 2px solid var(--hl-color); outline-offset: -2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hl-color) 40%, transparent);
+  background: var(--lesson-sel-bg);
+}
+.lesson.hl-dim { opacity: 0.25; }
+/* «Любое из двух»: свой цвет каждому параметру и третий — совпавшим по обоим.
+   background дублируем: в --lesson-sel-bg подстановка --hl-color уже сделана на :root. */
+.lesson.hl-b  { --hl-color: var(--hl-color-2);    background: color-mix(in srgb, var(--hl-color-2) 30%, var(--card)); }
+.lesson.hl-ab { --hl-color: var(--hl-color-both); background: color-mix(in srgb, var(--hl-color-both) 30%, var(--card)); }
+.hl-bar { display: flex; align-items: center; gap: 6px; }
+.hl-bar select { width: auto; }
+
+/* Итоговая таблица семестра: дисциплины × виды занятий */
+.sem-summary { margin-top: 24px; }
+.sem-summary-title { font-size: 15px; margin: 0 0 10px; color: var(--foreground); }
+table.summary-table { table-layout: auto; width: 100%; min-width: 100%; }
+table.summary-table th, table.summary-table td { padding: 6px 12px; white-space: nowrap; text-align: center; vertical-align: middle; }
+table.summary-table .ss-subj { min-width: 200px; max-width: 380px; white-space: normal; }
+table.summary-table .ss-num { text-align: center; font-variant-numeric: tabular-nums; }
+table.summary-table tbody .ss-total { font-weight: 700; background: var(--muted); }
+/* Строки учебных групп под дисциплиной (расписание преподавателя): мельче и
+   с отступом, чтобы строка самой дисциплины читалась как заголовок. */
+table.summary-table tbody .ss-group td { font-size: 12px; color: var(--muted-foreground); }
+table.summary-table tbody .ss-group .ss-subj { padding-left: 26px; }
+table.summary-table tbody .ss-group .ss-total { font-weight: 400; }
+/* Итого «лек-практ» (часы): каждая часть сверяется с подвалом отдельно — зелёная
+   совпала, красная нет. Подсветка на самих числах (а не всей ячейке). */
+.ss-total .hh-ok, .ss-total .hh-bad,
+.ss-plan .hh-ok, .ss-plan .hh-bad { padding: 0 5px; border-radius: 4px; }
+.ss-total .hh-ok, .ss-plan .hh-ok { background: color-mix(in srgb, var(--success) 35%, var(--card)); }
+.ss-total .hh-bad, .ss-plan .hh-bad { background: color-mix(in srgb, var(--destructive) 32%, var(--card)); }
+/* Чипы учёта зачёта/экзамена в сумме часов столбца «Уч. план» (клик переключает). */
+.ss-plan-togs { display: flex; gap: 4px; justify-content: center; margin-top: 4px; }
+.ss-plan-tog { cursor: pointer; user-select: none; font-size: 11px; line-height: 1.4;
+  padding: 0 6px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--muted); color: var(--muted-foreground); }
+.ss-plan-tog.on { background: color-mix(in srgb, var(--primary) 22%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); color: var(--foreground); font-weight: 600; }
+.ss-plan-tog:hover { border-color: var(--primary); }
+table.summary-table tbody tr:hover td { background: color-mix(in srgb, var(--primary) 7%, var(--card)); }
+table.summary-table .ss-foot td { font-weight: 700; background: var(--secondary); color: var(--secondary-foreground); }
+
+/* Таблица дисциплин с преподавателями (как в подвале исходного HTML) */
+.subjects-block { margin-top: 24px; }
+.subjects-title { font-size: 15px; margin: 0 0 4px; color: var(--foreground); }
+.subjects-hint { font-size: 12px; color: var(--muted-foreground); margin: 0 0 10px; }
+table.subjects-table { table-layout: auto; width: 100%; min-width: 100%; }
+table.subjects-table th, table.subjects-table td { padding: 4px 6px; vertical-align: middle; }
+table.subjects-table thead th { text-align: center; font-size: 12px; }
+table.subjects-table tbody tr:hover td { background: color-mix(in srgb, var(--primary) 7%, var(--card)); }
+table.subjects-table .subj-input {
+  padding: 5px 7px;
+  font-size: 13px;
+  color: var(--foreground);
+  border-radius: calc(var(--radius) - 0.4rem);
+}
+/* Многострочные поля: перенос текста, авто-высота (растёт из JS), без скролла. */
+table.subjects-table textarea.subj-input {
+  display: block;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+/* Ширины столбцов: обозначение/каф./часы узкие, дисциплина и преподаватели — широкие. */
+table.subjects-table .subj-abbr { min-width: 84px; }
+table.subjects-table .subj-abbr .subj-input { font-family: var(--font-mono); font-weight: 600; text-align: center; }
+table.subjects-table .subj-fullName { min-width: 220px; }
+table.subjects-table .subj-dept { width: 64px; }
+table.subjects-table .subj-dept .subj-input { text-align: center; }
+table.subjects-table .subj-lecturer { min-width: 200px; }
+table.subjects-table .subj-others { min-width: 220px; }
+table.subjects-table .subj-hours { width: 84px; }
+table.subjects-table .subj-hours .subj-input { text-align: center; }
+table.subjects-table .subj-report { width: 96px; }
+table.subjects-table .subj-report .subj-input, table.subjects-table th.subj-report { text-align: center; }
+
+/* Отчётность из учебного плана внесена в поле «Отчёт.». Если её нет в расписании —
+   ячейка обведена красным (токен темы), подробности — в подсказке (title). */
+.subjects-table td.rep-miss-cell { background: color-mix(in srgb, var(--destructive) 16%, var(--card)); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--destructive) 45%, transparent); }
+table.subjects-table .subj-input.rep-miss-field { background: color-mix(in srgb, var(--destructive) 18%, var(--input)); border-color: color-mix(in srgb, var(--destructive) 60%, var(--border)); font-weight: 600; }
+
+/* Подвал с обозначениями видов занятий (как в исходном HTML) */
+.legend-footer {
+  margin-top: 24px; padding: 16px 18px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--card);
+}
+.legend-title { font-size: 14px; margin: 0 0 12px; color: var(--foreground); }
+.legend-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 6px 24px;
+}
+.legend-item { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+.legend-code {
+  flex: none; min-width: 44px; font-family: var(--font-mono); font-weight: 600;
+  color: var(--primary);
+}
+.legend-name { color: var(--foreground); }
+
+/* Журнал: вид записи (перенос / добавление / удаление) — цветной ярлык. */
+.log-act { font-weight: 600; white-space: nowrap; }
+.log-act-create { color: var(--success); }
+.log-act-delete { color: var(--destructive, #f87171); }
+.log-act-room { color: var(--chart-4); }
+
+/* Журнал: цепочка изменений занятия. В таблице видна верхняя запись, кнопка с
+   числом раскрывает предыдущие шаги — они идут ниже, отступом и полосой слева. */
+.log-chain {
+  margin-left: 6px; padding: 0 6px; font: inherit; font-size: 11px; line-height: 17px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--secondary); color: var(--secondary-foreground); cursor: pointer;
+}
+.log-chain:hover { border-color: var(--ring); }
+.log-chain.open { background: var(--accent); color: var(--accent-foreground); }
+.log-step-no { color: var(--muted-foreground); font-size: 10px; }
+table.log-table tr.log-step > td { background: color-mix(in srgb, var(--muted) 60%, transparent); }
+table.log-table tr.log-step > td:first-child { padding-left: 16px; box-shadow: inset 3px 0 0 var(--grid-line); }
+
+/* Тумблер, недоступный из-за старого запущенного сервера. */
+.chk-warn { color: var(--destructive); font-size: 12px; }
+/* «Опубликовать», когда гости видят устаревший снимок. */
+#btnPublish.pending { box-shadow: inset 0 0 0 2px var(--warning); }
+
+/* Вид «Дисциплина»: выпадающий список учебных групп с галочками. */
+.pick-drop { position: relative; }
+.pick-list {
+  position: absolute; z-index: 30; left: 0; right: 0; margin-top: 4px;
+  max-height: 260px; overflow-y: auto;
+  background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 0.3rem);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%); padding: 6px;
+}
+.pick-item { display: flex; align-items: center; gap: 6px; padding: 3px 4px; font-size: 13px; cursor: pointer; }
+.pick-item:hover { background: var(--muted); border-radius: 4px; }
+
+/* Окно-виджет на рабочем столе (?widget=1) — та же гостевая страница, но без
+   шапки и органов управления, которые в маленьком окне только едят место.
+   Вкладки вида и выбор недели остаются: виджет переключается кнопками. */
+body.widget .topbar,
+body.widget .bg-gradient,
+body.widget .hl-bar,
+body.widget #btnGuestExport { display: none; }
+body.widget .main {
+  display: flex; flex-direction: column; height: 100vh; box-sizing: border-box;
+  padding: 6px 0 0; overflow: hidden;
+}
+body.widget #title { font-size: 15px; margin: 0 0 4px; }
+
+/* Панель окна-виджета: масштаб и обновление. Вне виджета её нет вовсе. */
+.widget-tools { display: none; align-items: center; gap: 4px; }
+body.widget .widget-tools { display: flex; }
+/* Выбор цвета заливки: нативный <input type=color> — своя палитра ОС, ничего
+   писать не нужно. Узкий, чтобы не распирал панель виджета. */
+.wz-color { width: 28px; height: 24px; padding: 0; border: 1px solid var(--border);
+  border-radius: 6px; background: none; cursor: pointer; }
+.wz-val { font-size: 12px; color: var(--muted-foreground); min-width: 38px; text-align: center; }
+/* Ползунок прозрачности окна — только в виджете, рядом с масштабом. */
+
+
+/* Виджет: панель управления свёрнута, на столе видна только сетка. Единственная
+   кнопка «✎» разворачивает её — она поверх всего и кликается всегда, потому что
+   виджет остаётся обычным окном (в обои его не вклеивают). */
+.widget-btns { display: none; }
+/* Кнопки прибиты к правому верхнему углу ОКНА: fixed, а не в потоке страницы —
+   иначе они ехали за таблицей (та шире окна) и уходили за правый край при
+   прокрутке. Начало координат страницы — уже ПОД срезанной шапкой браузера
+   (её снимает SetWindowRgn), поэтому top почти нулевой: любой отступ здесь
+   превращается в пустую полосу над кнопками. Место под них освобождает
+   padding-top у .main. */
+body.widget .widget-btns {
+  display: flex; gap: 4px; margin: 0;
+  position: fixed; top: 2px; right: 8px; z-index: 20;
+}
+body.widget .widget-btn {
+  width: 24px; height: 24px; padding: 0; line-height: 22px; text-align: center;
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  background: var(--card); color: var(--foreground); font-size: 13px;
+}
+body.widget .widget-btn:hover { background: var(--muted); }
+
+/* Полоски-подсказки курсора. Сами они ничего не делают: окно двигает и тянет
+   сторож по положению мыши (scripts/widget-window.ps1), а здесь только вид
+   курсора. Размеры под его зоны: верхняя кромка GRIP_PX, края EDGE_PX; правый
+   верхний угол исключён — там кнопки виджета. Вне виджета полосок нет. */
+.wz-grip { display: none; }
+body.widget .wz-grip { display: block; position: fixed; z-index: 15; }
+body.widget .wz-grip-move { top: 0; left: 0; right: 200px; height: 30px; cursor: move; }
+/* В виджете-программе за перетаскивание и размер отвечает само окно
+   (WM_NCHITTEST), но полоски всё равно нужны — как крашеные пиксели: у
+   слоёного окна прозрачные места пропускают клики насквозь, и хвататься за
+   пустую кромку было бы нечем. Мышь они не едят (pointer-events: none) —
+   решает окно; заливка почти невидимая, а размеры совпадают с его зонами. */
+/* В виджете-программе полосок нет: у слоёного окна мышь ловят только
+   непрозрачные пиксели страницы, поэтому прозрачная кромка бесполезна —
+   вместо неё две видимые ручки (см. .wz-hand). */
+body.widget.widget-host .wz-grip { display: none; }
+/* Ручки перетаскивания и размера — только в программе. */
+.wz-hand { display: none; }
+body.widget-host .wz-hand { display: block; cursor: move; }
+body.widget-host #wzSize {
+  position: fixed; right: 0; bottom: 0; z-index: 20; cursor: nwse-resize;
+  width: 16px; height: 16px; padding: 0; line-height: 14px; text-align: center;
+  font-size: 11px; border: 1px solid var(--border); border-radius: 4px 0 0 0;
+  background: var(--card); color: var(--foreground);
+}
+body.widget .wz-grip-w { top: 48px; right: 0; bottom: 0; width: 14px; cursor: ew-resize; }
+body.widget .wz-grip-h { left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; }
+body.widget .grid-head { display: none; }
+/* Панель правки лежит прямо на подложке — своей заливки у неё нет: она делала
+   светлую плашку поверх стекла. Читаемость держат сами органы управления
+   (у селектов и кнопок фон свой) и тёмный фон страницы. */
+body.widget.widget-edit .grid-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  background: transparent; padding: 4px 6px; margin: 0 0 6px;
+}
+body.widget .week-pick { flex-wrap: wrap; row-gap: 4px; }
+
+/* Фон виджета — настоящая дыра: этот цвет окно объявляет прозрачным
+   (LWA_COLORKEY в scripts/widget-window.ps1), пиксели ровно #010203 сквозные,
+   и на их месте видны обои. Карточки занятий и текст своей заливки не теряют,
+   поэтому остаются плотными. Затемнять фон отдельным окном-подложкой
+   пробовали — её перерисовка была видна как вспышка (6 кадров из 1490 против
+   0 без неё), поэтому подложки нет и прозрачность не регулируется.
+   Цвет почти чёрный намеренно: Chrome подмешивает фон в сглаживание букв, и
+   кайма вокруг них получается тёмной (с прежней магентой она была розовой).
+   Менять только вместе с $KEY_COLOR в том скрипте. */
+body.widget { background: #010203; }
+/* В виджете-программе цвет-ключ не нужен и вреден: окно там собирает
+   DirectComposition, прозрачность попиксельная, и любой непрозрачный фон
+   страницы просто закрыл бы обои. Фон задаёт панель виджета (сквозной,
+   сплошной цвет или полупрозрачный), а по умолчанию его нет вовсе. */
+body.widget.widget-host { background: transparent; }
+/* Ползунок плотности фона — только в программе: в браузере прозрачен ровно
+   цвет-ключ, промежуточных значений там не бывает. */
+body.widget:not(.widget-host) .wz-alpha { display: none; }
+.wz-alpha input[type="range"] { width: 70px; }
+/* Панель «Вид»: выпадает поверх сетки, как остальные выпадашки виджета. */
+.wz-look { position: relative; }
+.wz-look-pop {
+  position: absolute; z-index: 25; top: 100%; left: 0; margin-top: 4px; width: 260px;
+  max-height: 60vh; overflow: auto; padding: 6px;
+  background: var(--card); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+.wz-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; padding: 2px 0; }
+.wz-row input[type="color"] { width: 34px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; }
+.wz-row input[type="number"], .wz-row select { width: 96px; }
+
+/* Виджет-программа: нативные выпадающие списки, палитра ОС и пипетка там не
+   открываются — движок рисует в визуал DirectComposition, и всплывающее окно
+   ему рисовать негде. Списки подменяет свой <details> (dropifySelects), цвет —
+   палитра заготовок. В браузерном виджете всё наоборот. */
+body.widget-host .week-pick > select,
+body.widget-host .wz-row > select,
+body.widget-host .wz-color,
+body.widget-host #wzBgPick { display: none; }
+.wz-palette { display: none; gap: 2px; }
+body.widget-host .wz-palette { display: inline-flex; }
+/* Автозапуск умеет только программа — в браузерном виджете флажка нет. */
+.wz-auto { display: none; }
+body.widget-host .wz-auto { display: inline-flex; }
+.wz-swatch {
+  width: 18px; height: 18px; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.wz-swatch.on { outline: 2px solid var(--primary, #3b82f6); outline-offset: 1px; }
+.wz-drop { position: relative; display: none; }
+body.widget-host .wz-drop { display: inline-block; }
+.wz-drop > summary { list-style: none; cursor: pointer; }
+.wz-drop > summary::-webkit-details-marker { display: none; }
+.wz-drop-list {
+  position: absolute; z-index: 26; top: 100%; left: 0; margin-top: 4px;
+  min-width: 100%; max-height: 50vh; overflow: auto; padding: 4px;
+  background: var(--card); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+.wz-drop-item {
+  display: block; width: 100%; text-align: left; white-space: nowrap;
+  padding: 4px 8px; border: 0; border-radius: 4px; cursor: pointer;
+  background: none; color: inherit; font-size: 13px;
+}
+.wz-drop-item:hover { background: var(--muted); }
+.wz-drop-item.on { background: var(--primary, #3b82f6); color: #fff; }
+/* Виджет — только просмотр: по сетке не кликают (карточка занятия не
+   открывается) и текст из окна не выделяют. pointer-events снимаем с таблицы,
+   а не с #grid: прокрутка колесом принадлежит контейнеру и должна остаться.
+   Кнопки виджета и его панель работают как раньше. */
+body.widget { -webkit-user-select: none; user-select: none; }
+body.widget table.grid { pointer-events: none; }
+/* Граница курса: в виджете столбцы идут курсами подряд (1 → 5, «без курса»
+   справа), и без жирной черты не видно, где кончается один курс. */
+body.widget table.grid .crs-edge { border-left: 3px solid rgba(255, 255, 255, 0.55); }
+body.widget .main,
+body.widget #grid { background: transparent; flex: 1; min-height: 0; overflow: auto; }
+
+/* Сетка и пустые ячейки своей заливки не имеют: остаются линии сетки и
+   карточки занятий, у которых фон свой, — остальное показывает тёмный фон
+   страницы, приглушённый прозрачностью окна. */
+body.widget table.grid,
+body.widget table.grid td.slot,
+body.widget .grid-scroll { background: transparent; }
+/* Сетка растягивается на всё окно: ширина 100% у неё и так есть, а высоту
+   задаём явно — иначе строки жмутся к верху и снизу остаётся пустое стекло.
+   Для таблицы height — это минимум: если строк больше, чем помещается, таблица
+   вырастет и прокрутится как обычно. 44px — отступы .main сверху и снизу. */
+body.widget #grid > .grid-scroll { height: 100%; }
+body.widget table.grid { height: 100%; }
+
+/* Подписи (шапка групп, часы, дни) — без заливки и по центру ячейки: на
+   тёмном стекле заливка только режет фон светлыми полосами. */
+body.widget table.grid thead th,
+body.widget table.grid .time-cell,
+body.widget table.grid.semester .day-col,
+body.widget table.grid.semester .pair-col {
+  background: transparent; text-align: center; vertical-align: middle;
+}
+
+/* Виджет на обоях: текст белый и без обводки — читается поверх любой картинки,
+   а тени и контуры на прозрачном фоне только грязнят. */
+body.widget,
+body.widget #title,
+body.widget table.grid,
+body.widget table.grid th,
+body.widget table.grid td,
+body.widget table.grid .time-cell,
+body.widget table.grid.semester .day-col,
+body.widget table.grid.semester .pair-col,
+body.widget .cell-date { color: var(--widget-fg, #fff); text-shadow: none; }
+/* Серое сглаживание вместо субпиксельного: цветной бахромы вокруг букв нет. */
+body.widget { -webkit-font-smoothing: antialiased; }
+
+/* Полосы прокрутки в виджете не нужны: они непрозрачны и портят подложку.
+   Сетка при этом прокручивается колесом и перетаскиванием как обычно. */
+body.widget ::-webkit-scrollbar { width: 0; height: 0; }
+/* Полоса самой страницы этим правилом не берётся: она принадлежит корню, а
+   он телу не потомок. Отсюда :has() — иначе при широком содержимом справа
+   вылезала серая системная полоса. */
+:root:has(body.widget) { scrollbar-width: none; }
+
+/* Сверху у окна срезана полоса с шапкой браузера (SetWindowRgn в
+   scripts/widget-window.ps1) — сдвигаем содержимое, иначе верхняя строка
+   страницы уезжает под нож. Отступ больше среза: в разнице живут кнопки
+   виджета, они fixed и иначе накрыли бы угол сетки. */
+/* Отступ сверху — ровно под кнопки (24px + зазор): они fixed и иначе накрывали
+   бы правый верхний угол сетки. Больше не нужно: срез шапки в координаты
+   страницы не входит. В режиме правки отступ тот же — под кнопками
+   разворачивается панель. */
+body.widget .main { padding-top: 30px; }
+body.widget.widget-edit .main { padding-top: 30px; }
+body.widget #title { padding: 0 6px; }
+body.widget .widget-btn.on { background: var(--primary, #3b82f6); color: #fff; }
+
+/* Сквозной режим = неподвижная картинка: страница не отвечает на мышь вовсе,
+   живыми остаются только кнопки виджета (ими из режима и выходят). */
+body.widget.widget-ghost .main { pointer-events: none; }
+body.widget.widget-ghost .widget-btns,
+body.widget.widget-ghost .widget-btns * { pointer-events: auto; }

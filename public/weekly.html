@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Расписание — просмотр</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/print.css" media="print">
+  <script src="/js/theme.js"></script>
+  <script src="/js/shared-constants.js"></script>
+  <script src="/js/api.js" defer></script>
+  <script src="/js/teacher-tables.js" defer></script>
+  <script src="/js/guest.js" defer></script>
+</head>
+<body>
+  <div class="bg-gradient" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="brand"><span class="logo">Р</span> Расписание</div>
+    <div class="topbar-actions">
+      <button class="btn secondary icon" data-theme-toggle aria-label="Тема">🌙</button>
+      <a class="btn secondary sm" href="/login.html">Вход в админку</a>
+    </div>
+  </header>
+
+  <!-- Подсказки курсором: тащить окно и менять размер умеет сторож
+       (scripts/widget-window.ps1), но курсор он не рисует. Эти полоски дают
+       вид «перетащить» и «изменить размер»; границы совпадают с зонами
+       сторожа. Лежат ВНЕ .main намеренно: на .main висит zoom, а он тянет за
+       собой координаты position:fixed у потомков. Видны только в виджете. -->
+  <div class="wz-grip wz-grip-move" id="wzGripMove" title="Потяните, чтобы передвинуть виджет"></div>
+  <div class="wz-grip wz-grip-w" id="wzGripW" title="Потяните, чтобы изменить ширину"></div>
+  <div class="wz-grip wz-grip-h" id="wzGripH" title="Потяните, чтобы изменить высоту"></div>
+  <main class="main" id="guestRoot">
+    <!-- Кнопки виджета: показать/спрятать панель управления и закрыть окно.
+         В потоке документа, а не приклеены к углу окна: в пустой зоне браузер
+         их не отрисовывал. -->
+    <div class="widget-btns" id="widgetBtns" hidden>
+      <!-- Ручка перетаскивания: только в виджете-программе. У слоёного окна
+           мышь ловят лишь непрозрачные пиксели страницы, поэтому за пустую
+           кромку взяться нельзя — нужна видимая ручка. -->
+      <button class="widget-btn wz-hand" type="button" id="wzMove"
+              title="Потяните, чтобы передвинуть виджет">✥</button>
+      <button class="widget-btn" type="button" id="widgetToggle"
+              title="Показать или спрятать панель управления виджетом">✎</button>
+      <button class="widget-btn" type="button" id="widgetGhost"
+              title="Сквозной режим: мышь проходит виджет насквозь — клики достаются рабочему столу и окнам под ним. Сами эти кнопки остаются нажимаемыми">👻</button>
+      <button class="widget-btn" type="button" id="widgetClose" title="Закрыть виджет (запасная комбинация — Ctrl+Alt+Shift+W, работает из любого окна)">✕</button>
+    </div>
+    <!-- Уголок изменения размера — по той же причине, что и ручка выше. -->
+    <button class="wz-hand wz-size" type="button" id="wzSize"
+            title="Потяните, чтобы изменить размер виджета">◢</button>
+    <div class="grid-head">
+      <h1 id="title">Просмотр расписания</h1>
+      <div class="week-pick">
+        <select id="viewKind">
+          <option value="group">Группа</option>
+          <option value="teacher">Преподаватель</option>
+          <option value="room">Аудитория</option>
+          <option value="subject">Дисциплина</option>
+          <option value="dept">Кафедра</option>
+        </select>
+        <!-- Только для вида «Кафедра»: что идёт строками таблицы. -->
+        <select id="deptKind" hidden title="Что показать по кафедре: недельные сетки её преподавателей или её аудиторий">
+          <option value="teacher">Преподаватели</option>
+          <option value="room">Аудитории</option>
+        </select>
+        <select id="entitySelect"></select>
+        <!-- Только для вида «Дисциплина»: какие учебные группы показывать. -->
+        <div class="pick-drop" id="subjGroupsWrap" hidden>
+          <button class="btn secondary sm" id="subjGroupsBtn" type="button" aria-expanded="false">Группы: все</button>
+          <div class="pick-list" id="subjGroupsList" hidden></div>
+        </div>
+        <select id="weekSelect"></select>
+        <button class="btn secondary sm" id="btnGuestExport" hidden title="Скачать в Excel открытое расписание: группы, преподавателя, дисциплины или сводное за неделю — тем же файлом, что выгружает админка">⬇ Excel</button>
+        <a class="btn secondary sm" id="btnWidget" href="/api/widget-package" download title="Скачать виджет расписания на рабочий стол: окно с расписанием на сегодня, прозрачное и всегда под остальными окнами. Адрес этого сервера уже прописан внутри — распаковать и запустить виджет.exe. Нужна Windows 10 или 11">⬇ Виджет</a>
+        <div class="hl-bar">
+          <select id="hlKind">
+            <option value="">— подсветить —</option>
+            <option value="room">Аудитория</option>
+            <option value="subject">Дисциплина</option>
+            <option value="group">Учебная группа</option>
+          </select>
+          <select id="hlValue" disabled>
+            <option value="">—</option>
+          </select>
+          <button class="btn secondary sm" id="hlReset" type="button" title="Снять подсветку">Сбросить</button>
+        </div>
+        <label class="chk-lbl" id="tintWrap" hidden title="Разные цвета занятий: в расписании группы — по дисциплине, у преподавателя и дисциплины — по учебной группе. Выбор запоминается в этом браузере."><input type="checkbox" id="tintToggle" checked> Цвета</label>
+        <!-- Только для сводного: какие курсы показывать и нужен ли преподаватель. -->
+        <details class="grp-filter" id="crsFilter" hidden>
+          <summary class="btn secondary sm" title="Какие курсы показывать в сводном">🎓 Курсы <span id="crsFilterCount" class="muted-hint"></span></summary>
+          <div class="grp-filter-pop">
+            <div id="crsFilterList" class="grp-filter-list"></div>
+          </div>
+        </details>
+        <label class="chk-lbl" id="sumTeacherWrap" hidden title="Показывать преподавателя в карточках сводного расписания. Выбор запоминается в этом браузере."><input type="checkbox" id="sumTeacherToggle" checked> Преподаватель</label>
+        <!-- Только в окне-виджете (?widget=1): масштаб и обновление данных. -->
+        <div class="widget-tools" id="widgetTools" hidden>
+          <button class="btn secondary sm" type="button" id="wzOut" title="Мельче">A−</button>
+          <span class="wz-val" id="wzVal">100%</span>
+          <button class="btn secondary sm" type="button" id="wzIn" title="Крупнее">A+</button>
+          <button class="btn secondary sm" type="button" id="wzReload" title="Обновить данные">⟳</button>
+          <label class="chk-lbl" title="Снят — фон виджета сквозной, видны обои. Поставлен — фон красится выбранным цветом (в программе — матовым стеклом)."><input type="checkbox" id="wzBgOn"> Фон</label>
+          <input type="color" id="wzBgColor" class="wz-color" title="Цвет заливки фона">
+          <button class="btn secondary sm" type="button" id="wzBgPick" title="Пипетка: взять цвет прямо с экрана, например с обоев">💧</button>
+          <!-- Палитра — только в виджете-программе: нативная палитра ОС и
+               пипетка там не открываются (движок рисует в визуал). -->
+          <span class="wz-palette" id="wzBgPalette"></span>
+          <!-- Только в виджете-программе: там окно с попиксельной прозрачностью,
+               и фон гасится по-настоящему, не утягивая за собой текст. -->
+          <label class="chk-lbl wz-alpha" title="Плотность матового стекла: 100% — почти сплошной цвет, меньше — сквозь него проступает размытый фон рабочего стола. Текст и карточки остаются плотными">
+            <input type="range" id="wzBgAlpha" min="10" max="100" step="5" value="100">
+            <span class="wz-val" id="wzBgAlphaVal">100%</span>
+          </label>
+          <!-- Оформление виджета: те же токены, что правит админка, но выбор
+               личный — виджет стоит на конкретном ПК, под его обои и монитор. -->
+          <!-- Только в виджете-программе: он сам пишет себя в автозапуск
+               текущего пользователя. В браузерном варианте за это отвечает
+               установить-виджет.bat. -->
+          <label class="chk-lbl wz-auto" title="Запускать виджет при входе в Windows. Окно откроется там же и того же размера; если сервер ещё не поднялся, виджет подождёт его сам"><input type="checkbox" id="wzAutostart"> Автозапуск</label>
+          <details class="wz-look" id="wzLook">
+            <summary class="btn secondary sm" title="Оформление виджета: шрифт, цвет текста, размеры строк и цвета видов занятий">🎨 Вид</summary>
+            <div class="wz-look-pop" id="wzLookBody"></div>
+          </details>
+        </div>
+        <div class="view-modes">
+          <button class="tab active" data-mode="week">Неделя</button>
+          <button class="tab" data-mode="month" title="Четыре недели подряд, начиная с открытой">Месяц</button>
+          <button class="tab" data-mode="semester">Семестр</button>
+          <button class="tab" data-mode="summary">Сводное</button>
+          <button class="tab" data-mode="day" title="Сводное расписание за один день — открывается на сегодняшнем">День</button>
+        </div>
+      </div>
+    </div>
+    <div id="grid"></div>
+  </main>
+
+  <!-- Подробная информация по занятию (только чтение) -->
+  <div class="modal-backdrop" id="lessonModal" role="dialog" aria-modal="true" aria-labelledby="lmTitle">
+    <button class="modal-close" type="button" data-modal-close aria-label="Закрыть">×</button>
+    <div class="modal">
+      <h3 id="lmTitle">Занятие</h3>
+      <!-- Плашка «перенесено»: заполняется из журнала, пришедшего со снимком. -->
+      <div class="moved-banner" id="lmMoved" hidden></div>
+      <dl class="details">
+        <dt>Дисциплина</dt><dd id="lmSubject">—</dd>
+        <dt>Вид занятия</dt><dd id="lmType">—</dd>
+        <dt>Тема</dt><dd id="lmTopic">—</dd>
+        <dt>Преподаватель</dt><dd id="lmTeacher">—</dd>
+        <dt>Аудитория</dt><dd id="lmRoom">—</dd>
+        <dt>Группы</dt><dd id="lmGroups">—</dd>
+        <dt>Время</dt><dd id="lmSlot">—</dd>
+        <dt>Примечание</dt><dd id="lmNote">—</dd>
+      </dl>
+      <div class="actions">
+        <button class="btn secondary" type="button" id="lmFreeSlots" hidden title="Подсветить слоты, куда это занятие можно было бы перенести: свободны группа и преподаватель. Аудитории не учитываются, сам перенос в гостевом просмотре недоступен.">Свободные окна</button>
+        <button class="btn secondary" type="button" data-modal-close>Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/js/bg-gradient.js"></script>
+</body>
+</html>

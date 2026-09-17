@@ -1,0 +1,45 @@
+{
+  "name": "schedule-manager",
+  "version": "0.2.0",
+  "description": "Менеджер расписания вуза: импорт HTML-расписаний, проверка накладок, перенос пар",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "build": "node scripts/build-release.js",
+    "test": "node --test",
+    "test:e2e": "playwright test",
+    "gen-cert": "node scripts/generate-cert.js",
+    "backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup.ps1 -Mode backup",
+    "backup:list": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup.ps1 -Mode list",
+    "restore": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup.ps1 -Mode restore",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.js\" \"public/js/**/*.js\" \"tests/**/*.js\"",
+    "check": "npm run lint && npm test && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "exceljs": "^4.4.0",
+    "express": "^4.22.3",
+    "express-session": "^1.18.1",
+    "helmet": "^8.0.0",
+    "iconv-lite": "^0.6.3",
+    "jszip": "^3.10.1",
+    "multer": "^2.4.0",
+    "node-html-parser": "^6.1.13"
+  }
+}

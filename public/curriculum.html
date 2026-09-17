@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Учебные планы — Менеджер расписания</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/print.css" media="print">
+  <script src="/js/theme.js"></script>
+  <script src="/js/shared-constants.js"></script>
+  <script src="/vendor/xlsx.full.min.js"></script>
+  <script src="/js/curriculum-parser.js"></script>
+  <script src="/js/api.js" defer></script>
+  <script src="/js/curriculum.js" defer></script>
+  <style>
+    /* Только токены темы (theme.css) — без хардкода hex, чтобы работала и тёмная тема. */
+    .cur-page { padding: 16px 20px; max-width: 1500px; margin: 0 auto; color: var(--foreground); text-align: center; }
+    .cur-page section { margin-bottom: 24px; }
+    .cur-row { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .cur-sub { color: var(--muted-foreground); font-size: 13px; margin: 4px 0; line-height: 1.5; }
+    .cur-warn { background: color-mix(in srgb, var(--chart-2) 18%, var(--card)); border: 1px solid color-mix(in srgb, var(--chart-2) 45%, var(--card)); color: var(--foreground); padding: 8px 12px; border-radius: var(--radius); margin: 8px 0; }
+    .cur-warn ul { margin: 4px 0 0; padding-left: 20px; }
+    .cur-ok { background: color-mix(in srgb, var(--success) 16%, var(--card)); border: 1px solid color-mix(in srgb, var(--success) 45%, var(--card)); color: var(--foreground); padding: 6px 12px; border-radius: var(--radius); }
+    .cur-tbl { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: var(--radius); }
+    table.cur { border-collapse: collapse; font-size: 12px; white-space: nowrap; color: var(--foreground); background: var(--card); }
+    table.cur th, table.cur td { border: 1px solid var(--border); padding: 3px 6px; text-align: center; }
+    table.cur thead th { position: sticky; top: 0; background: var(--secondary); color: var(--foreground); z-index: 1; }
+    table.cur .num { text-align: center; }
+    table.cur .nm { white-space: normal; min-width: 240px; max-width: 380px; }
+    table.cur .cyc td { background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
+    table.cur tr.prac td { font-style: italic; color: var(--muted-foreground); }
+    .cw { font-size: 10px; background: var(--accent); color: var(--accent-foreground); padding: 0 4px; border-radius: 3px; }
+    .st-ok { color: var(--success); }
+    .st-warn { color: var(--primary); }
+    .st-bad { color: var(--destructive); font-weight: 600; }
+    .map-tbl select { min-width: 320px; }
+    .map-auto { color: var(--muted-foreground); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">Р</span> Менеджер расписания</div>
+    <div class="topbar-actions">
+      <button class="btn secondary icon" data-theme-toggle aria-label="Тема">🌙</button>
+      <a class="btn secondary sm" href="/admin.html">← К расписанию</a>
+      <button class="btn secondary sm" id="btnLogout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="cur-page">
+    <section id="planSection">
+      <h1>Учебные планы</h1>
+      <div class="cur-row">
+        <label class="lbl">Загруженные планы:</label>
+        <select id="kafSel"><option value="">— нет —</option></select>
+        <span style="margin-left:auto"></span>
+        <label class="btn secondary sm" style="cursor:pointer">
+          Загрузить .xlsx <input type="file" id="fileInput" accept=".xlsx" hidden>
+        </label>
+        <button class="btn sm" id="btnSavePlan" disabled>Сохранить план</button>
+      </div>
+      <div id="planMeta" class="cur-sub"></div>
+      <div id="planWarn"></div>
+      <div id="planTable"></div>
+    </section>
+
+    <section id="mapSection" style="display:none">
+      <h2>Сопоставление дисциплин → предметы расписания</h2>
+      <p class="cur-sub">Авто-подсказка по названию; сокращения (РЛС, НГО, РТК) правьте вручную. Пусто = не сопоставлено.</p>
+      <div class="cur-row"><button class="btn sm" id="btnSaveMap">Сохранить сопоставление</button></div>
+      <div id="mapTable" class="cur-tbl"></div>
+    </section>
+
+    <section id="checkSection" style="display:none">
+      <h2>Проверка расписания по группе</h2>
+      <div class="cur-row">
+        <label class="lbl">Группа:</label>
+        <select id="groupSel"></select>
+        <button class="btn sm" id="btnCheck">Проверить</button>
+        <button class="btn secondary sm" id="btnCheckAll">Проверить все</button>
+      </div>
+      <div id="checkMeta" class="cur-sub"></div>
+      <div id="checkTable"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+</body>
+</html>

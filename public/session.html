@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Календарь сессии — Менеджер расписания</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/print.css" media="print">
+  <script src="/js/theme.js"></script>
+  <script src="/js/shared-constants.js"></script>
+  <script src="/js/api.js" defer></script>
+  <script src="/js/session.js" defer></script>
+  <style>
+    /* Страница на всю высоту окна: прокрутка живёт внутри сетки, поэтому
+       горизонтальная полоса всегда прижата к низу экрана, а не к низу таблицы. */
+    html, body { height: 100%; }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+    .ses-page { padding: 16px 20px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    .ses-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .ses-sub { color: var(--muted-foreground, #777); font-size: 13px; }
+    #grid { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    .ses-wrap { flex: 1 1 auto; min-height: 0; overflow-x: scroll; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+    table.ses { border-collapse: collapse; font-size: 12px; }
+    table.ses th, table.ses td { border: 1px solid var(--border); padding: 0 4px; vertical-align: top; }
+    table.ses thead th { position: sticky; top: 0; z-index: 2; background: var(--card); text-align: center; white-space: nowrap; }
+    table.ses tbody th { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; white-space: nowrap; font-weight: 600; }
+    table.ses thead th:first-child { left: 0; z-index: 3; text-align: left; }
+    table.ses th .wd { display: block; font-weight: 400; color: var(--muted-foreground, #777); font-size: 10px; }
+    table.ses td { min-width: 112px; }
+    /* Фиксированная высота строки группы — ровно 5 строк текста (карточка 10px). */
+    table.ses tbody td, table.ses tbody th { height: 50px; }
+    table.ses th.off, table.ses td.off { background: var(--cell-holiday-bg); }
+    /* Карточка формы контроля в ячейке — ровно 4 строки (вид/дисц./ауд./преп.),
+       без переносов: лишний текст усекается, полностью виден в подсказке. */
+    .ses-a { border-radius: 3px; padding: 0 3px; margin: 0; line-height: 1.25; cursor: pointer; }
+    .ses-a:hover { outline: 1px solid var(--primary); }
+    .ses-a + .ses-a { margin-top: 2px; }
+    .ses-a > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ses-a .v { font-weight: 700; }
+    .ses-a .p { font-size: 9px; opacity: .85; }
+    .ses-a .d { font-weight: 600; }
+    .ses-a .r, .ses-a .t { color: var(--card-foreground, #333); opacity: .9; }
+    .ses-a.prep-bad { box-shadow: inset 0 0 0 2px var(--destructive); }
+    .ses-a.prep-bad .v { color: var(--destructive); }
+    .ses-a.exam { background: var(--lesson-exam-bg); }
+    .ses-a.zachet { background: var(--lesson-zachet-bg); }
+    .ses-a.coursework { background: color-mix(in srgb, var(--chart-4) 32%, var(--card)); }
+    .ses-a[draggable="true"] { cursor: grab; }
+    .ses-a.dragging { opacity: .4; cursor: grabbing; }
+    /* Подсветка допустимых дней для перетаскивания формы контроля */
+    .ses-wrap td.drop-ok { outline: 2px dashed var(--primary); outline-offset: -2px; background: color-mix(in srgb, var(--primary) 12%, var(--card)); }
+    .ses-empty { padding: 24px; text-align: center; color: var(--muted-foreground, #777); }
+    .ses-sort.active { background: var(--primary); color: var(--primary-foreground, #fff); border-color: var(--primary); }
+    .ses-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; align-items: center; }
+    .ses-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .ses-legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--border); }
+    /* Всплывающее окно с подробностями формы контроля */
+    .ses-pop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .ses-pop[hidden] { display: none; }
+    .ses-pop-box { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; min-width: 300px; max-width: 90vw; max-height: 85vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .ses-pop-box h3 { margin: 0 0 12px; font-size: 16px; padding-right: 24px; }
+    .ses-pop-box dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
+    .ses-pop-box dt { color: var(--muted-foreground, #777); white-space: nowrap; }
+    .ses-pop-box dd { margin: 0; }
+    .ses-pop-x { position: absolute; top: 10px; right: 14px; cursor: pointer; font-size: 20px; line-height: 1; color: var(--muted-foreground, #777); background: none; border: 0; }
+    .ses-targets { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; margin-top: 8px; }
+    /* Вкладки */
+    .ses-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab-btn.active { background: var(--primary); color: var(--primary-foreground, #fff); border-color: var(--primary); }
+    .ses-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    .ses-panel[hidden] { display: none; }
+    /* Список экзаменов и зачётов */
+    #exGrid { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+    table.ex { border-collapse: collapse; width: 100%; font-size: 13px; }
+    table.ex th, table.ex td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+    table.ex thead th { position: sticky; top: 0; z-index: 1; background: var(--card); white-space: nowrap; }
+    table.ex tbody tr:hover td { background: color-mix(in srgb, var(--primary) 7%, var(--card)); }
+    table.ex td.c { text-align: center; white-space: nowrap; }
+    table.ex .kaf-head td { font-weight: 700; background: var(--secondary); color: var(--secondary-foreground); }
+    .ex-mark { display: inline-block; padding: 0 7px; border-radius: 3px; font-weight: 600; }
+    .ex-mark.exam { background: var(--lesson-exam-bg); }
+    .ex-mark.zachet { background: var(--lesson-zachet-bg); }
+    .ex-mark.course { background: color-mix(in srgb, var(--chart-4) 32%, var(--card)); }
+    .ex-dash { color: var(--muted-foreground, #999); }
+    /* График сессии: курс → группа → таблица форм контроля */
+    #schGrid { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .sch-course h2 { font-size: 16px; margin: 4px 0 8px; }
+    .sch-group { margin-bottom: 16px; }
+    .sch-group h3 { font-size: 14px; margin: 0 0 6px; }
+    table.sch td { vertical-align: top; }
+    table.sch .ex-mark { white-space: nowrap; }
+    .sch-sub { color: var(--muted-foreground, #777); font-size: 11px; }
+    .sch-bad { color: var(--destructive); font-weight: 600; }
+    @media print {
+      @page { size: A4 landscape; margin: 8mm; }
+      html, body { height: auto; overflow: visible; display: block; }
+      .ses-page, .ses-panel { display: block; padding: 0; }
+      .ses-page > h1, .ses-tabs { display: none; }
+      #schGrid { overflow: visible; }
+      table.sch { font-size: 9pt; }
+      table.sch th, table.sch td { padding: 2px 4px; }
+      table.sch thead th { position: static; }
+      table.sch tr { break-inside: avoid; }
+      .sch-group h3 { break-after: avoid; }
+      .sch-course + .sch-course { break-before: page; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">Р</span> Менеджер расписания</div>
+    <div class="topbar-actions">
+      <button class="btn secondary icon" data-theme-toggle aria-label="Тема">🌙</button>
+      <a class="btn secondary sm" href="/admin.html">← К расписанию</a>
+      <button class="btn secondary sm" id="btnLogout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="ses-page">
+    <h1>Сессия</h1>
+    <div class="ses-tabs">
+      <button class="btn sm tab-btn active" data-tab="calendar">Календарь сессии</button>
+      <button class="btn sm tab-btn" data-tab="schedule">График сессии</button>
+      <button class="btn sm tab-btn" data-tab="exams">Список экзаменов и зачётов</button>
+    </div>
+
+    <div id="tabCalendar" class="ses-panel">
+      <div class="ses-row">
+        <label class="lbl">С</label>
+        <input type="date" id="from">
+        <label class="lbl">по</label>
+        <input type="date" id="to">
+        <span class="ses-legend" style="margin-left:auto">
+          <span><i class="exam" style="background:var(--lesson-exam-bg)"></i> Экзамен</span>
+          <span><i class="zachet" style="background:var(--lesson-zachet-bg)"></i> Зачёт</span>
+        </span>
+      </div>
+      <div class="ses-row" style="gap:8px">
+        <span class="ses-sub">Сортировка:</span>
+        <button class="btn sm ses-sort active" data-sort="group">По группам</button>
+        <button class="btn sm ses-sort" data-sort="course">По курсам</button>
+        <button class="btn sm ses-sort" data-sort="dept">По кафедрам</button>
+        <span style="margin-left:8px; color:var(--border)">|</span>
+        <label class="lbl" for="courseFilter">Курс:</label>
+        <select id="courseFilter" class="input sm" style="width:auto;padding:3px 8px;height:28px"></select>
+      </div>
+      <div id="meta" class="ses-sub" style="margin-bottom:10px"></div>
+      <div id="grid"></div>
+    </div>
+
+    <div id="tabSchedule" class="ses-panel" hidden>
+      <div class="ses-row print-hide" style="gap:8px">
+        <label class="lbl" for="schCourse">Курс:</label>
+        <select id="schCourse" class="input sm" style="width:auto;padding:3px 8px;height:28px"></select>
+        <label class="lbl" for="schDept">Кафедра:</label>
+        <select id="schDept" class="input sm" style="width:auto;padding:3px 8px;height:28px" title="Кафедра преподавателя — как в виде «Преподаватели»"></select>
+        <input type="text" id="schSubject" class="input sm" list="schSubjects" placeholder="Дисциплина" autocomplete="off" style="width:180px;padding:3px 8px;height:28px">
+        <datalist id="schSubjects"></datalist>
+        <input type="text" id="schTeacher" class="input sm" list="schTeachers" placeholder="Преподаватель" autocomplete="off" style="width:200px;padding:3px 8px;height:28px">
+        <datalist id="schTeachers"></datalist>
+        <button class="btn secondary sm" id="schReset">Сбросить</button>
+        <button class="btn secondary sm" id="schPrint" style="margin-left:auto">🖨 Печать</button>
+      </div>
+      <div id="schMeta" class="ses-sub print-hide" style="margin-bottom:10px"></div>
+      <div id="schGrid"></div>
+    </div>
+
+    <div id="tabExams" class="ses-panel" hidden>
+      <div class="ses-row" style="gap:8px">
+        <label class="lbl" for="exSem">Семестр:</label>
+        <select id="exSem" class="input sm" style="width:auto;padding:3px 8px;height:28px">
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+          <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+        </select>
+        <span style="margin-left:8px; color:var(--border)">|</span>
+        <label class="lbl" for="exKaf">Кафедра:</label>
+        <select id="exKaf" class="input sm" style="width:auto;padding:3px 8px;height:28px">
+          <option value="">Все кафедры</option>
+        </select>
+        <span class="ses-legend" style="margin-left:auto">
+          <span><i style="background:var(--lesson-exam-bg)"></i> Экзамен</span>
+          <span><i style="background:var(--lesson-zachet-bg)"></i> Зачёт</span>
+          <span><i style="background:color-mix(in srgb, var(--chart-4) 32%, var(--card))"></i> Курсовой</span>
+        </span>
+      </div>
+      <div id="exGrid"></div>
+    </div>
+  </main>
+
+  <div class="ses-pop" id="pop" hidden></div>
+  <div class="toast" id="toast"></div>
+</body>
+</html>
