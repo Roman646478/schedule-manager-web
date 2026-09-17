@@ -1,6 +1,6 @@
 {
   "name": "schedule-manager",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Менеджер расписания вуза: импорт HTML-расписаний, проверка накладок, перенос пар",
   "main": "src/server.js",
   "type": "commonjs",
