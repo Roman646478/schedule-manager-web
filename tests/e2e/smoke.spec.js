@@ -49,7 +49,8 @@ test('импорт, перенос, отмена и публикация вид�
       room: lesson.room,
     });
     const moved = await window.api.get('/api/schedule?view=group&id=999');
-    await window.api.post('/api/undo');
+    const undo = await window.api.get('/api/undo');
+    await window.api.post('/api/undo', { expectedId: undo.id });
     const undone = await window.api.get('/api/schedule?view=group&id=999');
     await window.api.put('/api/entity-visibility', { kind: 'groups', name: '999', hidden: false });
     await window.api.post('/api/publish');

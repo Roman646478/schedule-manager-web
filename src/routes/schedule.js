@@ -934,7 +934,7 @@ router.put('/appearance', requireAuth, (req, res, next) => {
 router.get('/undo', requireAuth, (req, res, next) => {
   try {
     const last = peekUndo();
-    res.json(last ? { action: last.action, description: last.description } : {});
+    res.json(last ? { id: last.id, action: last.action, description: last.description } : {});
   } catch (err) {
     next(err);
   }
@@ -943,8 +943,9 @@ router.get('/undo', requireAuth, (req, res, next) => {
 // Отменить последнее действие.
 router.post('/undo', requireAuth, (req, res, next) => {
   try {
-    const result = performUndo();
-    if (!result.ok) return res.status(409).json(result);
+    const expectedId = req.body?.expectedId ?? null;
+    const result = performUndo(expectedId);
+    if (!result.ok) return res.status(result.code || 409).json(result);
     res.json({ success: true });
   } catch (err) {
     next(err);

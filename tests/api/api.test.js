@@ -203,6 +203,34 @@ test('устаревшая карточка получает 409 и не зат�
   assert.equal(after.lessons.find((item) => item.id === lesson.id).topic, 'Т.актуальная');
 });
 
+test('устаревшая кнопка отмены не отменяет более новое действие', async () => {
+  const oldUndo = await (await api('GET', '/api/undo')).json();
+  assert.ok(Number.isInteger(oldUndo.id));
+
+  const view = await (await api('GET', '/api/schedule?view=group&id=823')).json();
+  const lesson = view.lessons[0];
+  const changedTopic = 'Т.для проверки отмены';
+  const edit = await api('PUT', `/api/lesson/${lesson.id}`, {
+    body: { expectedRevision: lesson.revision, topic: changedTopic },
+  });
+  assert.equal(edit.status, 200);
+
+  const staleUndo = await api('POST', '/api/undo', { body: { expectedId: oldUndo.id } });
+  assert.equal(staleUndo.status, 409);
+  assert.equal((await staleUndo.json()).stale, true);
+
+  const afterStale = await (await api('GET', '/api/schedule?view=group&id=823')).json();
+  assert.equal(afterStale.lessons.find((item) => item.id === lesson.id).topic, changedTopic);
+
+  const currentUndo = await (await api('GET', '/api/undo')).json();
+  assert.notEqual(currentUndo.id, oldUndo.id);
+  const undo = await api('POST', '/api/undo', { body: { expectedId: currentUndo.id } });
+  assert.equal(undo.status, 200);
+
+  const restored = await (await api('GET', '/api/schedule?view=group&id=823')).json();
+  assert.equal(restored.lessons.find((item) => item.id === lesson.id).topic, lesson.topic);
+});
+
 test('справочники вместимости/численности и проверка ошибок', async () => {
   assert.equal((await api('PUT', '/api/groups', { body: { name: '823', headcount: 25 } })).status, 200);
   assert.equal((await api('PUT', '/api/rooms', { body: { name: '262-7', capacity: 20 } })).status, 200);

@@ -5038,9 +5038,11 @@
       const btn = $('btnUndo');
       if (data && data.action) {
         btn.disabled = false;
+        btn.dataset.undoId = String(data.id);
         btn.title = data.description || data.action;
       } else {
         btn.disabled = true;
+        delete btn.dataset.undoId;
         btn.title = '';
       }
     } catch {
@@ -5050,7 +5052,12 @@
 
   async function doUndo() {
     try {
-      await api.post('/api/undo');
+      const expectedId = Number($('btnUndo').dataset.undoId);
+      if (!Number.isInteger(expectedId) || expectedId <= 0) {
+        await refreshUndo();
+        throw new Error('Список действий изменился. Повторите отмену.');
+      }
+      await api.post('/api/undo', { expectedId });
       toast('Действие отменено');
       state.relocated = new Set(); // снять подсветку переселённых после отмены
       state.srUnplaced = null; // снять подсветку «не хватило аудитории» после отмены

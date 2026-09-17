@@ -53,12 +53,25 @@ function peekUndo(db = getDb()) {
 
 // Отменить последнее действие: восстановить состояние из снимка, удалить запись.
 // Конфликты при восстановлении НЕ проверяются — пользователь явно откатывает изменение.
-function performUndo() {
+function performUndo(expectedId = null) {
+  if (expectedId !== null && (!Number.isInteger(expectedId) || expectedId <= 0)) {
+    return { ok: false, code: 400, reasons: ['Некорректный идентификатор действия'] };
+  }
   return transaction((db) => {
     const last = db
       .prepare('SELECT id, action, snapshot FROM undo_stack ORDER BY id DESC LIMIT 1')
       .get();
     if (!last) return { ok: false, reasons: ['Нечего отменять'] };
+
+    if (expectedId !== null && last.id !== expectedId) {
+      return {
+        ok: false,
+        code: 409,
+        stale: true,
+        currentId: last.id,
+        reasons: ['Список действий изменился. Обновите страницу и повторите отмену.'],
+      };
+    }
 
     const snap = JSON.parse(last.snapshot);
     const times = PAIR_TIMES[snap.pairNo] || { start: null, end: null };
