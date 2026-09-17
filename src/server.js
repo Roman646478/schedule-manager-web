@@ -128,6 +128,20 @@ function createApp(opts = {}) {
   // Главной страницы нет — корень открывает сразу расписание.
   app.get('/', (req, res) => res.redirect('/weekly.html'));
 
+  // Vivliostyle Core поставляется как CommonJS-бандл. Оборачиваем его для
+  // браузера и отдаём с нашего origin, чтобы качественная печать работала без
+  // CDN и не ослабляла Content-Security-Policy приложения.
+  app.get('/vendor/vivliostyle-core.js', (req, res, next) => {
+    const file = require.resolve('@vivliostyle/core');
+    res.type('application/javascript');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.write('(function(){var module={exports:{}},exports=module.exports;\n');
+    const stream = fs.createReadStream(file);
+    stream.on('error', next);
+    stream.on('end', () => res.end('\nwindow.VivliostyleCore=module.exports;}());'));
+    stream.pipe(res, { end: false });
+  });
+
   // Снимок для гостей отдаётся оттуда, куда его пишет publish() (PUBLIC_DB_PATH),
   // а не статикой из public/: при переопределённом пути гости молча видели бы
   // старый файл. Рядом publish() кладёт сжатую копию (.gz) — ее и получает

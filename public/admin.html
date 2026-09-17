@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="/css/print.css" media="not all" id="printPreviewCss">
   <script src="/js/theme.js"></script>
   <script src="/js/print.js" defer></script>
+  <script src="/vendor/vivliostyle-core.js" defer></script>
+  <script src="/js/quality-print.js" defer></script>
   <script src="/js/shared-constants.js"></script>
   <script src="/js/api.js" defer></script>
   <script src="/js/teacher-tables.js" defer></script>
@@ -152,6 +154,7 @@
           <summary>Экспорт и печать</summary>
           <div class="group">
             <button class="btn secondary sm block" id="btnPrint" title="Печать того, что сейчас показано в сетке (панели и кнопки на лист не попадают). То же делает Ctrl+P">🖨 Печать сетки</button>
+            <button class="btn secondary sm block" id="btnQualityPrint" type="button" title="Постраничная печать таблицы через Vivliostyle: чёткий текст, повтор заголовков и корректные разрывы строк">🖨 Качественная печать</button>
             <button class="btn secondary sm block" id="btnExportGroup" title="Семестровое расписание выбранной группы в отдельный файл по шаблону «Расписание группы/Образец группа.xlsx»">⬇ Расписание группы</button>
             <button class="btn secondary sm block" id="btnExportTeacher" title="Семестровое расписание выбранного преподавателя по тому же шаблону, что и у группы (в ячейке — вид/тема, дисциплина с группами, аудитория)">⬇ Расписание преподавателя</button>
             <button class="btn secondary sm block" id="btnExportGroups" title="Семестровое расписание каждой группы — по файлу на группу, всё одним zip-архивом">⬇ Все группы (zip)</button>

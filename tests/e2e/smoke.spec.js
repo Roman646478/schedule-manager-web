@@ -165,6 +165,9 @@ test('гостевой экран и печатный режим загружа�
 
   await page.goto('/weekly.html');
   await expect(page.locator('#guestRoot')).toBeVisible();
+  const pageHtml = await (await page.request.get('/weekly.html')).text();
+  expect(pageHtml).toContain('id="btnQualityPrint"');
+  await expect.poll(() => page.evaluate(() => typeof window.VivliostyleCore?.printHTML)).toBe('function');
   const snapshot = await (await page.request.get('/public_db.json')).json();
   const weekCount = await page.locator('#weekSelect option').count();
   const localWeek = await page.evaluate(
@@ -176,6 +179,14 @@ test('гостевой экран и печатный режим загружа�
   expect(Number(await page.locator('#weekSelect').inputValue())).toBe(localWeek || 1);
   await page.locator('[data-mode="day"]').click();
   expect(Number(await page.locator('#weekSelect').inputValue())).toBe(localWeek || 1);
+  const qualityDocument = await page.evaluate(() => {
+    const grid = document.getElementById('grid') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'grid' }));
+    grid.innerHTML = '<table><thead><tr><th>День</th></tr></thead><tbody><tr><td>Пн</td></tr></tbody></table>';
+    return window.QualityPrint.buildDocument();
+  });
+  expect(qualityDocument).toContain('@page { size: A4 landscape');
+  expect(qualityDocument).toContain('<table');
+  expect(qualityDocument).not.toContain('id="btnQualityPrint"');
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('#guestRoot')).toBeVisible();
   expect(errors).toEqual([]);
