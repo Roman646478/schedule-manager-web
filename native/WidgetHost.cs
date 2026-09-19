@@ -144,10 +144,25 @@ static class Native
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern bool SetDllDirectory(string path);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("dcomp.dll")]
     public static extern int DCompositionCreateDevice(IntPtr dxgiDevice, ref Guid iid, out IntPtr device);
+
+    // Манифест DPI на части установок .NET Framework применяется слишком
+    // поздно: WinForms уже успевает включить виртуализацию координат. Тогда при
+    // масштабе 125% окно считает себя шириной 1920, хотя Windows создаёт 1536,
+    // и клики по WebView2 уходят на 25% мимо. Включаем режим до создания любого
+    // окна; старые выпуски Windows 10 поддерживают хотя бы системный DPI-режим.
+    public static void EnableDpiAwareness()
+    {
+        try { if (SetProcessDpiAwarenessContext(new IntPtr(-4))) return; }
+        catch (EntryPointNotFoundException) { }
+        try { SetProcessDPIAware(); }
+        catch (EntryPointNotFoundException) { }
+    }
 }
 
 // DirectComposition: нужны ровно три вызова — создать устройство, привязать его
@@ -329,6 +344,8 @@ class WidgetForm : Form
     protected override async void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        WidgetHost.Log("Window shown: dpi=" + Native.GetDpiForWindow(Handle)
+            + " bounds=" + Bounds + " client=" + ClientSize);
         SetGhost(ghost);
         Native.RegisterHotKey(Handle, HOTKEY_GHOST, 3, 0x57);        // Ctrl+Alt+W
         Native.RegisterHotKey(Handle, HOTKEY_CLOSE, 3 | 4, 0x57);    // Ctrl+Alt+Shift+W
@@ -565,7 +582,11 @@ class WidgetForm : Form
                 SetGlass(p.Length > 2 ? p[1] : "", p.Length > 2 ? p[2] : "0");
                 break;
             case "close":
+                WidgetHost.Log("UI action: close");
                 Close();
+                break;
+            case "ui":
+                WidgetHost.Log("UI action: " + string.Join(":", p));
                 break;
         }
     }
@@ -596,6 +617,47 @@ class WidgetForm : Form
     Point grabCursor;
     Rectangle grabBounds;
     string grabEdge;
+    bool topButtonPressed;
+
+    // Верхние четыре кнопки должны работать даже при сбое пересылки мыши в
+    // композиционный WebView2. Их положение фиксировано CSS: справа налево —
+    // закрыть, сквозной режим, панель, перемещение. Обрабатываем эти узкие зоны
+    // самим окном, а странице посылаем только команду обновить свой вид.
+    bool HandleTopButton(Point p)
+    {
+        float s = DpiScale;
+        if (p.Y < 0 || p.Y > 32 * s) return false;
+        int fromRight = ClientSize.Width - p.X;
+        int closeMin = (int)(6 * s), closeMax = (int)(34 * s);
+        int ghostMin = (int)(34 * s), ghostMax = (int)(62 * s);
+        int toggleMin = (int)(62 * s), toggleMax = (int)(90 * s);
+        int moveMin = (int)(90 * s), moveMax = (int)(122 * s);
+        if (fromRight >= closeMin && fromRight <= closeMax)
+        {
+            WidgetHost.Log("Native top button: close");
+            Close();
+        }
+        else if (fromRight >= ghostMin && fromRight < ghostMax)
+        {
+            WidgetHost.Log("Native top button: ghost");
+            SetGhost(!ghost);
+            Save();
+        }
+        else if (fromRight >= toggleMin && fromRight < toggleMax)
+        {
+            WidgetHost.Log("Native top button: toggle");
+            if (controller != null) controller.CoreWebView2.ExecuteScriptAsync(
+                "document.getElementById('widgetToggle') && document.getElementById('widgetToggle').click()");
+        }
+        else if (fromRight >= moveMin && fromRight < moveMax)
+        {
+            WidgetHost.Log("Native top button: move");
+            StartDrag("move");
+        }
+        else return false;
+        topButtonPressed = true;
+        return true;
+    }
 
     void StartDrag(string edge)
     {
@@ -839,7 +901,6 @@ class WidgetForm : Form
                 return;
                 break;
             case Native.WM_MOUSEMOVE:
-            case Native.WM_LBUTTONUP:
             case Native.WM_LBUTTONDBLCLK:
             case Native.WM_RBUTTONDOWN:
             case Native.WM_RBUTTONUP:
@@ -849,11 +910,25 @@ class WidgetForm : Form
             case Native.WM_MOUSEHWHEEL:
                 ForwardMouse(ref m);
                 break;
+            case Native.WM_LBUTTONUP:
+                if (topButtonPressed)
+                {
+                    topButtonPressed = false;
+                    Native.ReleaseCapture();
+                    return;
+                }
+                ForwardMouse(ref m);
+                break;
             case Native.WM_LBUTTONDOWN:
                 // Захват мыши на время нажатия: без него движок теряет
                 // перетаскивание (ползунок не едет за курсором). Захват берём
                 // напрямую у Windows: свойство Capture у формы WinForms
                 // проглатывает сообщения, и до движка не доходит даже клик.
+                WidgetHost.Log("Mouse down: x=" + (short)(m.LParam.ToInt32() & 0xFFFF)
+                    + " y=" + (short)((m.LParam.ToInt32() >> 16) & 0xFFFF));
+                int down = m.LParam.ToInt32();
+                Point downPoint = new Point((short)(down & 0xFFFF), (short)((down >> 16) & 0xFFFF));
+                if (HandleTopButton(downPoint)) return;
                 Native.SetCapture(Handle);
                 ForwardMouse(ref m);
                 break;
@@ -884,6 +959,7 @@ static class WidgetHost
     [STAThread]
     static void Main(string[] args)
     {
+        Native.EnableDpiAwareness();
         // Сборки WebView2 лежат ресурсами внутри exe — для человека это один
         // файл. Обработчик ставим до первого обращения к их типам.
         AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbedded;

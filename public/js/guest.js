@@ -543,7 +543,11 @@
       btn.title = on ? 'Спрятать панель управления' : 'Показать панель управления виджетом';
       localStorage.setItem('widgetEdit', on ? '1' : '0');
     };
-    btn.onclick = () => apply(!document.body.classList.contains('widget-edit'));
+    btn.onclick = () => {
+      const on = !document.body.classList.contains('widget-edit');
+      apply(on);
+      if (HOST) toHost(`ui:toggle:${on ? 1 : 0}`);
+    };
     apply(localStorage.getItem('widgetEdit') === '1');
   }
 
