@@ -142,6 +142,22 @@ function createApp(opts = {}) {
     stream.pipe(res, { end: false });
   });
 
+  // printHTML Vivliostyle создаёт внутри iframe собственный обработчик события
+  // в атрибуте. Общая CSP приложения запрещает такие обработчики, из-за чего
+  // подготовка молча зависала навсегда. Разрешение действует только на двух
+  // страницах с кнопкой печати; API, вход и остальные страницы остаются под
+  // строгой политикой Helmet.
+  app.get(['/weekly.html', '/admin.html'], (req, res, next) => {
+    const csp = String(res.getHeader('Content-Security-Policy') || '');
+    if (csp) res.setHeader(
+      'Content-Security-Policy',
+      csp
+        .replace("script-src-attr 'none'", "script-src-attr 'unsafe-hashes' 'sha256-IoHt7ILZfP073FyJ4aRKfD30CooKpEQIHoIoWApzDpM='")
+        .replace("connect-src 'self'", "connect-src 'self' blob: data:")
+    );
+    next();
+  });
+
   // Снимок для гостей отдаётся оттуда, куда его пишет publish() (PUBLIC_DB_PATH),
   // а не статикой из public/: при переопределённом пути гости молча видели бы
   // старый файл. Рядом publish() кладёт сжатую копию (.gz) — ее и получает

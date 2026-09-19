@@ -60,31 +60,99 @@
     } else if (isError) alert(message);
   }
 
+  function resetButton(button) {
+    if (!button) return;
+    button.disabled = false;
+    button.textContent = '🖨 Качественная печать';
+  }
+
+  // Запасная печать остаётся настоящей HTML-печатью: текст и границы идут в
+  // PDF/принтер вектором. Отдельный iframe нужен, чтобы не печатать панели
+  // страницы и не ужимать всю сетку старым режимом «в один лист».
+  function printWithBrowser(html, button) {
+    const frame = document.createElement('iframe');
+    frame.title = 'Подготовка печати расписания';
+    frame.style.cssText = 'position:fixed;left:-12000px;top:0;width:1122px;height:794px;border:0';
+    frame.onload = async () => {
+      frame.onload = null;
+      try {
+        if (frame.contentDocument && frame.contentDocument.fonts) await Promise.race([
+          frame.contentDocument.fonts.ready,
+          new Promise(resolve => setTimeout(resolve, 3000)),
+        ]);
+        resetButton(button);
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch (err) {
+        resetButton(button);
+        notify(`Не удалось открыть печать: ${err.message}`, true);
+      }
+      setTimeout(() => frame.remove(), 60000);
+    };
+    frame.srcdoc = html;
+    document.body.appendChild(frame);
+  }
+
   function printQuality() {
     const api = window.VivliostyleCore;
-    if (!api || typeof api.printHTML !== 'function') {
-      notify('Модуль качественной печати не загрузился', true);
-      return;
-    }
     const button = $('btnQualityPrint');
+    if (button && button.disabled) return;
     try {
       if (button) { button.disabled = true; button.textContent = 'Готовлю страницы…'; }
-      api.printHTML(buildDocument(), {
+      const html = buildDocument();
+      if (!api || typeof api.printHTML !== 'function') {
+        printWithBrowser(html, button);
+        return;
+      }
+      const oldFrames = new Set(document.querySelectorAll('iframe'));
+      let finished = false;
+      let engineFrame;
+      const fallback = (message) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(watchdog);
+        if (engineFrame) engineFrame.remove();
+        notify(message, false);
+        printWithBrowser(html, button);
+      };
+      const watchdog = setTimeout(
+        () => fallback('Подготовка заняла слишком много времени — открываю печать браузера'),
+        15000
+      );
+      try { api.printHTML(html, {
         title: 'Расписание',
         hideIframe: true,
-        removeIframe: true,
+        removeIframe: false,
         printCallback: (frameWindow) => {
-          if (button) { button.disabled = false; button.textContent = '🖨 Качественная печать'; }
-          frameWindow.focus();
-          frameWindow.print();
+          if (finished) return;
+          finished = true;
+          clearTimeout(watchdog);
+          resetButton(button);
+          try {
+            frameWindow.focus();
+            frameWindow.print();
+          } catch (err) {
+            notify(`Не удалось открыть печать: ${err.message}`, true);
+          } finally {
+            // Фрейм сохраняется после вызова print: некоторые браузеры
+            // открывают системный диалог асинхронно.
+            setTimeout(() => { if (engineFrame) engineFrame.remove(); }, 60000);
+          }
         },
         errorCallback: (message) => {
-          if (button) { button.disabled = false; button.textContent = '🖨 Качественная печать'; }
-          notify(`Не удалось подготовить печать: ${message}`, true);
+          clearTimeout(watchdog);
+          console.warn('Ошибка подготовки печати:', message);
+          fallback('Открываю печать браузера');
         },
       });
+      engineFrame = [...document.querySelectorAll('iframe')].find(frame => !oldFrames.has(frame));
+      } catch (err) {
+        engineFrame = [...document.querySelectorAll('iframe')].find(frame => !oldFrames.has(frame));
+        console.warn('Ошибка подготовки печати:', err);
+        fallback('Открываю печать браузера');
+      }
     } catch (err) {
-      if (button) { button.disabled = false; button.textContent = '🖨 Качественная печать'; }
+      resetButton(button);
       notify(err.message || 'Не удалось подготовить печать', true);
     }
   }
