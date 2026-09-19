@@ -1013,11 +1013,12 @@ router.get('/widget-package', async (req, res, next) => {
 // виджет — внутри подписанный установщик Microsoft, никаких данных.
 router.get('/webview2-installer', (req, res, next) => {
   try {
-    if (!fs.existsSync(WEBVIEW2_INSTALLER)) {
+    const installer = req.query.arch === 'x86' ? WEBVIEW2_INSTALLER.replace('X64.exe', 'X86.exe') : WEBVIEW2_INSTALLER;
+    if (!fs.existsSync(installer)) {
       res.status(404).json({ error: 'В сборке нет установщика движка WebView2 (vendor/webview2-runtime)' });
       return;
     }
-    res.download(WEBVIEW2_INSTALLER, 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe');
+    res.download(installer);
   } catch (err) {
     next(err);
   }

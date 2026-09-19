@@ -91,7 +91,12 @@ async function buildWidgetExe(target, pin) {
   if (process.platform !== 'win32') return null;
   if (!fs.existsSync(EXE_SOURCE) || !fs.existsSync(EXE_BUILD)) return null;
   const url = widgetUrl(target);
-  const stamp = `${fs.statSync(EXE_SOURCE).mtimeMs}:${fs.statSync(EXE_BUILD).mtimeMs}`;
+  const inputs = [EXE_SOURCE, EXE_BUILD, SCRIPT_PATH,
+    path.join(__dirname, '../../native/app.manifest'),
+    path.join(__dirname, '../../vendor/webview2/Microsoft.Web.WebView2.Core.dll'),
+    path.join(__dirname, '../../vendor/webview2/WebView2Loader.dll'),
+    path.join(__dirname, '../../vendor/webview2/x86/WebView2Loader.dll')];
+  const stamp = inputs.map(file => fs.existsSync(file) ? crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') : 'missing').join(':');
   const key = crypto.createHash('sha1').update([url, pin || '', stamp].join('|')).digest('hex').slice(0, 12);
   const out = path.join(EXE_CACHE, `widget-${key}.exe`);
   if (fs.existsSync(out)) return out;
@@ -110,7 +115,8 @@ async function buildWidgetExe(target, pin) {
       .map(name => ({ name, time: fs.statSync(path.join(EXE_CACHE, name)).mtimeMs })).sort((a, b) => b.time - a.time);
     for (const item of old.slice(16)) fs.rmSync(path.join(EXE_CACHE, item.name), { force: true });
     return fs.existsSync(out) ? out : null;
-  } catch {
+  } catch (err) {
+    console.error('[widget] Не удалось собрать EXE:', err.message);
     return null;
   }
   })();
@@ -168,11 +174,18 @@ function engineBatText({ srv, port, scheme }) {
     '',
     `if not defined SRV set SRV=${srv}`,
     `if not defined PORT set PORT=${port}`,
-    `set "URL=${scheme}://%SRV%:%PORT%/api/webview2-installer"`,
+    'set "ARCH=x86"',
+    'if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" set "ARCH=x64"',
+    'if defined PROCESSOR_ARCHITEW6432 set "ARCH=x64"',
+    `set "URL=${scheme}://%SRV%:%PORT%/api/webview2-installer?arch=%ARCH%"`,
     'set "SETUP=%TEMP%\\MicrosoftEdgeWebView2RuntimeInstaller.exe"',
     '',
     'echo Скачивание движка с %SRV%:%PORT% (около 200 МБ, может занять пару минут)...',
-    `curl.exe ${insecure}-L --fail -o "%SETUP%" "%URL%"`,
+    'if exist "%~dp0runtime\\MicrosoftEdgeWebView2RuntimeInstaller%ARCH%.exe" (',
+    '  copy /y "%~dp0runtime\\MicrosoftEdgeWebView2RuntimeInstaller%ARCH%.exe" "%SETUP%" >nul',
+    ') else (',
+    `  curl.exe ${insecure}-L --fail -o "%SETUP%" "%URL%"`,
+    ')',
     'if errorlevel 1 (',
     '  echo.',
     '  echo Не удалось скачать движок с %SRV%:%PORT%.',
@@ -191,7 +204,8 @@ function engineBatText({ srv, port, scheme }) {
     ')',
     'del "%SETUP%" >nul 2>&1',
     'echo.',
-    'echo Готово. Запустите виджет.exe.',
+    'echo Готово. Запускаю виджет.',
+    'start "" "%~dp0виджет.exe"',
     'pause',
     '',
   ].join('\r\n');
@@ -208,7 +222,11 @@ function readmeText({ srv, port, scheme }, hasExe = true, hasEngine = false) {
   ] : [];
   const exeLines = hasExe ? [
     '  Двойной клик по виджет.exe. Больше ничего не нужно: адрес сервера уже',
-    '  внутри, устанавливать тоже нечего.',
+    '  внутри. Поддерживаются 32- и 64-битная Windows 10/11.',
+    '  Для встроенного окна нужен WebView2. При ошибке программа предложит',
+    '  открыть виджет через установленный Edge или Chrome.',
+    '  Диагностика: запустите виджет.exe --diagnose. Отчёт сохраняется в',
+    '  %LOCALAPPDATA%\\schedule-widget\\diagnostics.txt, ошибки — startup.log.',
     '  Windows может спросить про неизвестного издателя — «Подробнее», затем',
     '  «Выполнить в любом случае»: программа не подписана сертификатом.',
     '',

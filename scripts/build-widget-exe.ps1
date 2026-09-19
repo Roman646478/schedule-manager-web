@@ -19,7 +19,8 @@
 param(
   [string]$Url = '',
   [string]$SpkiHash = '',
-  [string]$Out = ''
+  [string]$Out = '',
+  [ValidateSet('anycpu', 'x86', 'x64')][string]$Architecture = 'anycpu'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,7 +38,9 @@ foreach ($f in @($src, $manifest)) { if (-not (Test-Path $f)) { throw "Нет ф
 # дочернего окна у него нет — хватает Core.dll и нативного загрузчика.
 $core = Join-Path $vendor 'Microsoft.Web.WebView2.Core.dll'
 $loader = Join-Path $vendor 'WebView2Loader.dll'
-foreach ($f in @($core, $loader)) {
+$loaderX86 = Join-Path $vendor 'x86\WebView2Loader.dll'
+$browserScript = Join-Path $root 'scripts\widget-window.ps1'
+foreach ($f in @($core, $loader, $loaderX86, $browserScript)) {
   if (-not (Test-Path $f)) { throw "Нет $f — см. vendor/webview2/README.md" }
 }
 
@@ -64,7 +67,7 @@ try {
   if ($outDir -and -not (Test-Path $outDir)) { New-Item -ItemType Directory -Force $outDir | Out-Null }
 
   $cscArgs = @(
-    '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
+    '/nologo', '/target:winexe', "/platform:$Architecture", '/optimize+',
     "/out:$Out",
     "/win32manifest:$manifest",
     "/r:$core",
@@ -73,6 +76,8 @@ try {
     # загрузчик exe кладёт в профиль и показывает загрузчику DLL.
     "/resource:$core,Microsoft.Web.WebView2.Core.dll",
     "/resource:$loader,WebView2Loader.dll",
+    "/resource:$loaderX86,WebView2Loader.x86.dll",
+    "/resource:$browserScript,widget-window.ps1",
     $tmpSrc
   )
   $log = & $csc $cscArgs
@@ -85,5 +90,8 @@ try {
   if ($Url) { Write-Output "Адрес внутри: $Url" }
 }
 finally {
-  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  $resolvedBuildTemp = [IO.Path]::GetFullPath($tmp)
+  $expectedBuildParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
+  if ((Split-Path -Parent $resolvedBuildTemp).TrimEnd('\') -ne $expectedBuildParent -or (Split-Path -Leaf $resolvedBuildTemp) -notmatch '^widget-build-[a-f0-9]{32}$') { throw 'Небезопасный путь временной сборки' }
+  Remove-Item -LiteralPath $resolvedBuildTemp -Recurse -Force -ErrorAction SilentlyContinue
 }

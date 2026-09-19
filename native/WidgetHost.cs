@@ -128,9 +128,19 @@ static class Native
     [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint mods, uint vk);
     [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
-    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
+    static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value);
+    static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int index, IntPtr value);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    static extern int GetWindowLong32(IntPtr hWnd, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
+    static extern int SetWindowLong32(IntPtr hWnd, int index, int value);
+    public static IntPtr GetWindowLongPtr(IntPtr hWnd, int index) {
+        return IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, index) : new IntPtr(GetWindowLong32(hWnd, index));
+    }
+    public static IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value) {
+        return IntPtr.Size == 8 ? SetWindowLongPtr64(hWnd, index, value) : new IntPtr(SetWindowLong32(hWnd, index, value.ToInt32()));
+    }
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern bool SetDllDirectory(string path);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hWnd);
@@ -242,6 +252,8 @@ class WidgetForm : Form
     IDCompositionTarget dcompTarget;
     IDCompositionVisual dcompRoot;
     bool ghost;
+    bool showingConnectionError;
+    readonly NotifyIcon tray = new NotifyIcon();
 
     public WidgetForm(string url, string spki)
     {
@@ -256,6 +268,19 @@ class WidgetForm : Form
         BackColor = KeyColor;
         TransparencyKey = KeyColor;
         Bounds = SavedBounds();
+        tray.Icon = SystemIcons.Application;
+        tray.Text = "Расписание — виджет";
+        ContextMenuStrip trayMenu = new ContextMenuStrip();
+        trayMenu.Items.Add("Показать в центре экрана", null, delegate {
+            Rectangle area = Screen.PrimaryScreen.WorkingArea;
+            Bounds = new Rectangle(area.Left + 30, area.Top + 30, Math.Min(1180, area.Width - 60), Math.Min(780, area.Height - 60));
+            SetGhost(false);
+            Show();
+        });
+        trayMenu.Items.Add("Обновить", null, delegate { if (controller != null) controller.CoreWebView2.Navigate(url); });
+        trayMenu.Items.Add("Закрыть", null, delegate { Close(); });
+        tray.ContextMenuStrip = trayMenu;
+        tray.Visible = true;
         drag.Interval = 15;
         drag.Tick += DragTick;
         ghostPoll.Interval = 120;
@@ -348,7 +373,8 @@ class WidgetForm : Form
         }
         catch (Exception ex)
         {
-            ShowStartupError(ex);
+            if (ex is WebView2RuntimeNotFoundException && File.Exists(Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "установить-движок.bat"))) ShowStartupError(ex);
+            else WidgetHost.ReportFailure(ex, url);
             Close();
         }
     }
@@ -370,7 +396,7 @@ class WidgetForm : Form
         {
             DialogResult answer = MessageBox.Show(
                 "Движок WebView2 на этом компьютере не установлен — без него окно-виджет не запустится." + nl + nl +
-                "Рядом лежит «установить-движок.bat»: он скачает движок с сервера расписания (интернет не нужен) " +
+                "Рядом лежит «установить-движок.bat»: он возьмёт движок из папки runtime или с сервера расписания (интернет не нужен) " +
                 "и поставит его для вашего пользователя, без прав администратора." + nl + nl +
                 "Запустить установку сейчас?",
                 "Виджет расписания", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
@@ -415,11 +441,17 @@ class WidgetForm : Form
     // сообщаем ей, стоит ли виджет в автозапуске.
     void OnNavigated(object sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        if (showingConnectionError && controller.CoreWebView2.Source == "about:blank") return;
         if (!e.IsSuccess)
         {
+            WidgetHost.Log("Navigation failed: " + url + " " + e.WebErrorStatus);
+            showingConnectionError = true;
+            controller.CoreWebView2.NavigateToString("<!doctype html><meta charset='utf-8'><body style='background:#eef2f6;color:#17212b;font:16px Segoe UI;padding:24px'><h2>Сервер расписания недоступен</h2><p>Виджет работает. Проверьте запуск сервера и подключение к сети.</p><p>" + System.Net.WebUtility.HtmlEncode(url) + "</p><p>Подключение повторяется автоматически каждые 5 секунд.</p><button onclick='window.close()'>Закрыть виджет</button></body>");
             retry.Start();
             return;
         }
+        showingConnectionError = false;
+        WidgetHost.Log("Schedule loaded: " + url);
         retry.Stop();
     }
 
@@ -832,6 +864,10 @@ class WidgetForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        retry.Stop();
+        drag.Stop();
+        ghostPoll.Stop();
+        tray.Dispose();
         Native.UnregisterHotKey(Handle, HOTKEY_GHOST);
         Native.UnregisterHotKey(Handle, HOTKEY_CLOSE);
         Save();
@@ -851,8 +887,56 @@ static class WidgetHost
         // Сборки WebView2 лежат ресурсами внутри exe — для человека это один
         // файл. Обработчик ставим до первого обращения к их типам.
         AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbedded;
-        ExtractNativeLoader();
-        Run(args);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e) { ReportFailure(e.Exception, DefaultUrl); };
+        AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { Log(Convert.ToString(e.ExceptionObject)); };
+        try {
+            ExtractNativeLoader();
+            if (args.Length > 0 && args[0] == "--diagnose") {
+                Diagnose();
+                return;
+            }
+            Run(args);
+        } catch (Exception ex) { ReportFailure(ex, DefaultUrl); }
+    }
+
+    internal static void Log(string text) {
+        try {
+            Directory.CreateDirectory(Settings.Dir);
+            File.AppendAllText(Path.Combine(Settings.Dir, "startup.log"), DateTime.Now.ToString("s") + " " + text + Environment.NewLine);
+        } catch { }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static void Diagnose() {
+        string report = "OS=" + Environment.OSVersion + Environment.NewLine + "Process=" + (IntPtr.Size * 8) + " bit" + Environment.NewLine + "Server=" + DefaultUrl;
+        try { report += Environment.NewLine + "WebView2=" + CoreWebView2Environment.GetAvailableBrowserVersionString(null); }
+        catch (Exception ex) { report += Environment.NewLine + ex.ToString(); }
+        Directory.CreateDirectory(Settings.Dir);
+        File.WriteAllText(Path.Combine(Settings.Dir, "diagnostics.txt"), report);
+        Log(report);
+    }
+
+    internal static void ReportFailure(Exception ex, string url) {
+        Log(ex.ToString());
+        string message = "Не удалось открыть встроенное окно расписания.\n\n" + ex.Message +
+            "\n\nПодробности: " + Path.Combine(Settings.Dir, "startup.log") +
+            "\n\nОткрыть виджет через установленный Edge или Chrome?";
+        if (MessageBox.Show(message, "Виджет расписания", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        try {
+            string script = Path.Combine(Settings.Dir, "widget-window.ps1");
+            using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("widget-window.ps1"))
+            using (FileStream target = File.Create(script)) { source.CopyTo(target); }
+            ProcessStartInfo start = new ProcessStartInfo("powershell.exe");
+            start.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + "\" -Url \"" + url + "\"";
+            if (SpkiHash.Length > 0) start.Arguments += " -SpkiHash \"" + SpkiHash + "\"";
+            start.UseShellExecute = false;
+            start.CreateNoWindow = true;
+            Process.Start(start);
+        } catch (Exception fallback) {
+            Log(fallback.ToString());
+            MessageBox.Show("Не удалось открыть браузерный виджет: " + fallback.Message, "Виджет расписания");
+        }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -866,7 +950,10 @@ static class WidgetHost
         bool first;
         using (new Mutex(true, "schedule-widget-single", out first))
         {
-            if (!first) return;
+            if (!first) {
+                MessageBox.Show("Виджет уже запущен. Сверните окна, чтобы увидеть его на рабочем столе.\nCtrl+Alt+W переключает сквозной режим, Ctrl+Alt+Shift+W закрывает виджет.", "Виджет расписания");
+                return;
+            }
             Settings.Load();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -891,20 +978,20 @@ static class WidgetHost
     // настройками и показываем каталог загрузчику DLL.
     static void ExtractNativeLoader()
     {
-        try
         {
-            using (Stream st = Assembly.GetExecutingAssembly().GetManifestResourceStream("WebView2Loader.dll"))
+            string resource = IntPtr.Size == 8 ? "WebView2Loader.dll" : "WebView2Loader.x86.dll";
+            using (Stream st = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
             {
-                if (st == null) return;
-                Directory.CreateDirectory(Settings.Dir);
-                string dll = Path.Combine(Settings.Dir, "WebView2Loader.dll");
+                if (st == null) throw new FileNotFoundException("В программе отсутствует " + resource);
+                string nativeDir = Path.Combine(Settings.Dir, "native", Assembly.GetExecutingAssembly().ManifestModule.ModuleVersionId.ToString("N"), IntPtr.Size == 8 ? "x64" : "x86");
+                Directory.CreateDirectory(nativeDir);
+                string dll = Path.Combine(nativeDir, "WebView2Loader.dll");
                 if (!File.Exists(dll) || new FileInfo(dll).Length != st.Length)
                 {
                     using (FileStream fs = File.Create(dll)) st.CopyTo(fs);
                 }
-                Native.SetDllDirectory(Settings.Dir);
+                if (!Native.SetDllDirectory(nativeDir)) throw new IOException("Не удалось подключить каталог движка: " + nativeDir);
             }
         }
-        catch { /* не вышло — рядом с exe DLL всё равно может лежать */ }
     }
 }

@@ -3,7 +3,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveTarget, batText, certPin, widgetUrl } = require('../../src/services/widgetPackageService.js');
+const { resolveTarget, batText, certPin, widgetUrl, engineBatText } = require('../../src/services/widgetPackageService.js');
+
+test('установка движка выбирает разрядность, локальный установщик и перезапускает виджет', () => {
+  const bat = engineBatText({ srv: '192.168.31.86', port: '443', scheme: 'http' });
+  assert.match(bat, /set "ARCH=x86"/);
+  assert.match(bat, /PROCESSOR_ARCHITEW6432/);
+  assert.match(bat, /api\/webview2-installer\?arch=%ARCH%/);
+  assert.match(bat, /if exist "%~dp0runtime\\MicrosoftEdgeWebView2RuntimeInstaller%ARCH%\.exe"/);
+  assert.ok(bat.indexOf('if errorlevel 1 (', bat.indexOf('/silent /install')) < bat.indexOf('start "" "%~dp0виджет.exe"'));
+});
 
 // Адрес для виджета: обычно берётся тот, по которому гость открыл страницу.
 test('resolveTarget: адрес и порт из запроса', () => {

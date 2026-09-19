@@ -1,5 +1,5 @@
 'use strict';
-/* global window */
+/* global window, document */
 
 const { test, expect } = require('@playwright/test');
 const path = require('node:path');

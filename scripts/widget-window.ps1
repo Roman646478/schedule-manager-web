@@ -72,7 +72,8 @@ public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int 
 # GetWindowRect отдаёт «виртуальные» пиксели (при 125% - 0.8 от настоящих), а
 # SetWindowPos и SetWindowRgn ждут настоящие. Регион окна выходил на 20% меньше
 # окна, и справа с низу оставалась несрезанная прозрачная полоса.
-if (-not [WidgetWin.Api]::SetProcessDpiAwarenessContext([IntPtr](-4))) {
+try { $widgetDpiReady = [WidgetWin.Api]::SetProcessDpiAwarenessContext([IntPtr](-4)) } catch { $widgetDpiReady = $false }
+if (-not $widgetDpiReady) {
     # PER_MONITOR_AWARE_V2 нет до Windows 10 1703 - хватит и системного.
     [void][WidgetWin.Api]::SetProcessDPIAware()
 }
@@ -147,7 +148,7 @@ function Get-WorkArea {
 # Масштаб монитора, на котором сейчас окно (125% -> 1.25).
 function Get-WidgetScale {
     param([IntPtr]$H)
-    $dpi = [WidgetWin.Api]::GetDpiForWindow($H)
+    try { $dpi = [WidgetWin.Api]::GetDpiForWindow($H) } catch { $dpi = 96 }
     if ($dpi -lt 48) { return 1.0 }
     return [double]$dpi / 96.0
 }
@@ -162,6 +163,8 @@ function Get-WindowTitle {
 function Find-Browser {
     $paths = @(
         "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+        "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe",
+        "$env:LOCALAPPDATA\Microsoft\Edge\Application\msedge.exe",
         "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
         "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
         "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"

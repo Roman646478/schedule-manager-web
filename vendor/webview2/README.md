@@ -8,6 +8,11 @@
 | --- | --- |
 | `Microsoft.Web.WebView2.Core.dll` | `lib/net462/` |
 | `WebView2Loader.dll` | `runtimes/win-x64/native/` |
+| `x86/WebView2Loader.dll` | `runtimes/win-x86/native/` |
+
+EXE собирается как AnyCPU. Загрузчик выбирается по разрядности процесса и
+извлекается в отдельный каталог версии программы. Параметр сборки
+`-Architecture x86` используется для проверки 32-битного запуска.
 
 Обёртка `Microsoft.Web.WebView2.WinForms.dll` из пакета НЕ нужна: движок
 размещается композиционно (`CreateCoreWebView2CompositionControllerAsync`),

@@ -17,6 +17,7 @@ const entries = [
   'public',
   'scripts/backup.ps1',
   'scripts/build-widget-exe.ps1',
+  'scripts/build-widget-package.js',
   'scripts/generate-cert.js',
   'scripts/widget-shortcuts.ps1',
   'scripts/widget-window.ps1',

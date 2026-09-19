@@ -37,6 +37,7 @@ band.png
 # Офлайн-установщик Microsoft больше лимита GitHub (100 МБ). Он опционален:
 # локальная сборка включает имеющуюся копию, а исходный репозиторий — нет.
 vendor/webview2-runtime/MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+vendor/webview2-runtime/MicrosoftEdgeWebView2RuntimeInstallerX86.exe
 
 # Временные файлы SQLite вне стандартной data/.
 *.db
