@@ -22,10 +22,23 @@ function arg(name, def) {
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
 
-// Проверяем наличие openssl.
-try {
-  execFileSync('openssl', ['version'], { stdio: 'pipe' });
-} catch {
+// Сначала PATH, затем типовые каталоги Git for Windows: Git часто уже стоит,
+// но его usr/bin не добавлен в PATH обычной консоли Windows.
+const opensslCandidates = [
+  'openssl',
+  'C:\\Program Files\\Git\\usr\\bin\\openssl.exe',
+  'C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe',
+  'C:\\Program Files\\OpenSSL-Win64\\bin\\openssl.exe',
+];
+let openssl = null;
+for (const candidate of opensslCandidates) {
+  try {
+    execFileSync(candidate, ['version'], { stdio: 'pipe' });
+    openssl = candidate;
+    break;
+  } catch { /* пробуем следующий путь */ }
+}
+if (!openssl) {
   console.error(
     'openssl не найден в PATH. Установите OpenSSL (в Git for Windows он есть в Git Bash)\n' +
       'или сгенерируйте key.pem/cert.pem на другой машине и положите в data/tls/.'
@@ -66,7 +79,7 @@ fs.writeFileSync(
 
 try {
   execFileSync(
-    'openssl',
+    openssl,
     [
       'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
       '-keyout', TLS_KEY_PATH,
