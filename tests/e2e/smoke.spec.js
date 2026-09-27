@@ -11,6 +11,10 @@ async function login(page) {
   await page.locator('#password').fill('admin');
   await page.locator('#loginBtn').click();
   await expect(page).toHaveURL(/\/admin\.html$/);
+  // URL меняется до завершения загрузки defer-скриптов. Сценарии ниже вызывают
+  // API из страницы, поэтому ждём готовый клиент, а не только навигацию.
+  await page.waitForFunction(() => Boolean(window.api && window.api.get && window.api.post));
+  await expect(page.locator('#btnLogout')).toBeVisible();
 }
 
 test('вход открывает админку без ошибок JavaScript', async ({ page }) => {
@@ -70,6 +74,26 @@ test('импорт, перенос, отмена и публикация вид�
   await guest.locator('#entitySelect').selectOption('999');
   await expect(guest.locator('#grid')).toContainText('ТЕСТ');
   await guest.close();
+});
+
+test('поздний ответ распознавания не стирает результат импорта', async ({ page }) => {
+  await login(page);
+  let releasePreview;
+  const holdPreview = new Promise(resolve => { releasePreview = resolve; });
+  await page.route('**/api/import/preview', async route => {
+    const response = await route.fetch();
+    await holdPreview;
+    await route.fulfill({ response });
+  });
+  await page.getByText('Импорт расписания', { exact: true }).click();
+  await page.locator('#fileInput').setInputFiles(path.join(__dirname, '..', 'fixtures', 'synthetic-group.html'));
+  await page.locator('#btnImport').click();
+  await expect(page.locator('#importStatus')).toContainText('Готово');
+  const preview = page.waitForResponse('**/api/import/preview');
+  releasePreview();
+  await (await preview).finished();
+  await page.evaluate(() => new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
+  await expect(page.locator('#importStatus')).toContainText('Готово');
 });
 
 test('Excel показывает подсказку распознавания до импорта', async ({ page }) => {

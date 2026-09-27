@@ -1,9 +1,9 @@
 'use strict';
 
 const { commandRouter } = require('../middleware/mutations');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { validateBody, moveBodyErrors } = require('../middleware/validation');
-const { listEntities, getView, getParked, getOrphans, clearOrphans, parkLesson, setLessonLocked, clearBuffer, moveLesson, getMoveLog, clearMoveLog, deleteMoveLogEntry, revertMove, setMoveLogNote, getMoveOptions, getSubjects, getFreeSlotsFor, getFreeRooms, getRoomOptions, getSummary, getRoomSummary, suggestSrPlacement, getStats, getTeacherOptions, editLesson, publish, guestEditLesson, resetDatabase, clearSchedule, deleteLesson, deleteEntitySchedule, replaceGroupTeacher, createLesson, createVacation, createGroupVacation, decommissionRoom, placeSelfStudy, clearSrWeek, previewHiddenGroupTeacherLessons, clearHiddenGroupTeacherLessons, blockTeacherSlot, saveSubjectRow, addSubjectRow, deleteSubjectRow, getExamMoveTargets, moveExam, getMoveMarks, publishStatus, getSessionSchedule } = require('../services/scheduleService');
+const { listEntities, getView, getParked, getOrphans, clearOrphans, parkLesson, setLessonLocked, clearBuffer, moveLesson, getMoveLog, clearMoveLog, deleteMoveLogEntry, revertMove, setMoveLogNote, getMoveOptions, getSubjects, getFreeSlotsFor, getFreeRooms, getRoomOptions, getSummary, getRoomSummary, suggestSrPlacement, getStats, getTeacherOptions, editLesson, publish, resetDatabase, clearSchedule, deleteLesson, deleteEntitySchedule, replaceGroupTeacher, createLesson, createVacation, createGroupVacation, decommissionRoom, placeSelfStudy, clearSrWeek, previewHiddenGroupTeacherLessons, clearHiddenGroupTeacherLessons, blockTeacherSlot, saveSubjectRow, addSubjectRow, deleteSubjectRow, getExamMoveTargets, moveExam, getMoveMarks, publishStatus, getSessionSchedule, getMoveActions, latestOwnMoveAction, revertMoveAction } = require('../services/scheduleService');
 const { buildErrorReport, getSessionCalendar } = require('../services/conflictService');
 const { getSetting, setSetting, getSemester, getSemesters, saveSemester, selectSemester, deleteSemester, getCourses, setCourses, getHolidays, setHolidays, getDateNotes, setDateNotes, getAppearance, setAppearance, getTypeLegend, getGroupSubjects, getSubjectAliases, setSubjectAliases, getEventTypes, setEventTypes, getLessonTypes, setLessonTypes, getRoomPlanSettings, setRoomPlanSettings, ROOM_PLAN_RULES } = require('../services/settingsService');
 const { suggestRoomPlan, applyRoomPlan } = require('../services/roomOptimizerService');
@@ -14,8 +14,77 @@ const { verifyResetPassword } = require('../services/authService');
 const { sortTopics } = require('../services/topicOrderService');
 const { buildWidgetPackage, WEBVIEW2_INSTALLER } = require('../services/widgetPackageService');
 const fs = require('node:fs');
+const { canEditGroups, canEditLesson, groupsForLesson, allowedGroups } = require('../services/userService');
+const { getDb } = require('../config/database');
 
 const router = commandRouter();
+
+const denyGroups = (res) => res.status(403).json({ error: 'Нет права изменять все группы этого занятия', code: 'GROUP_ACCESS_DENIED' });
+const decorateLessons = (lessons, user) => {
+  const allowed = user.role === 'admin' ? null : allowedGroups(user);
+  return lessons.map((l) => {
+    const editable = user.role === 'admin' || ((l.groups || []).length > 0 && (l.groups || []).every((g) => allowed.has(g)));
+    return { ...l, editable, readOnlyReason: editable ? null : 'Нет доступа ко всем группам занятия' };
+  });
+};
+
+function staleLesson(req, res, lessonId) {
+  if (req.user.role === 'admin') return false;
+  const row = getDb().prepare('SELECT revision FROM lessons WHERE id=?').get(Number(lessonId));
+  if (!row) { res.status(404).json({ error: 'Занятие не найдено' }); return true; }
+  const expected = Number(req.body && req.body.expectedRevision);
+  if (!Number.isSafeInteger(expected) || expected !== Number(row.revision)) {
+    res.status(409).json({ error: 'Занятие уже изменено. Обновите расписание', stale: true, currentRevision: row.revision });
+    return true;
+  }
+  return false;
+}
+
+function editorReferenceError(user, body) {
+  if (user.role === 'admin') return null;
+  if (body.category === 'event') return 'Кафедра не может создавать мероприятия';
+  const db = getDb();
+  const missing = (table, values) => values.filter((v) => v && !db.prepare(`SELECT 1 FROM ${table} WHERE name=?`).get(v));
+  const rooms = Array.isArray(body.rooms) ? body.rooms : (body.room ? [body.room] : []);
+  const teachers = Array.isArray(body.teachers) ? body.teachers : (body.teacher ? [body.teacher] : []);
+  if (missing('rooms', rooms).length) return 'Можно выбирать только существующие аудитории';
+  if (missing('teachers', teachers).length) return 'Можно выбирать только существующих преподавателей';
+  if (body.subject && !db.prepare('SELECT 1 FROM subjects WHERE abbr=? UNION SELECT 1 FROM lessons WHERE subject=? LIMIT 1').get(body.subject, body.subject)) {
+    return 'Можно выбирать только существующие дисциплины';
+  }
+  return null;
+}
+
+function replayMoveCommand(req, res, lessonId) {
+  const commandId = req.body && req.body.commandId;
+  if (commandId == null) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(commandId))) {
+    res.status(400).json({ error: 'Некорректный идентификатор команды' });
+    return true;
+  }
+  const row = getDb().prepare('SELECT actor_user_id, lesson_id, status FROM move_actions WHERE action_id=?').get(String(commandId));
+  if (!row) return false;
+  if (Number(row.actor_user_id) !== Number(req.user.id) || Number(row.lesson_id) !== Number(lessonId)) {
+    res.status(409).json({ error: 'Идентификатор команды уже использован для другого действия' });
+    return true;
+  }
+  req.mutationFinalized = true;
+  res.json({ success: true, actionId: String(commandId), replayed: true, status: row.status });
+  return true;
+}
+
+function canEditItemLessons(user, items) {
+  if (user.role === 'admin') return true;
+  const ids = new Set();
+  const visit = (value) => {
+    if (!value || typeof value !== 'object') return;
+    if (value.lessonId != null) ids.add(Number(value.lessonId));
+    if (value.withLessonId != null) ids.add(Number(value.withLessonId));
+    for (const child of Object.values(value)) if (child && typeof child === 'object') visit(child);
+  };
+  visit(items);
+  return ids.size > 0 && [...ids].every((id) => Number.isSafeInteger(id) && canEditLesson(user, id));
+}
 
 // Проверка корректности дат семестра (реальная дата + начало не позже конца).
 function validateSemesterDates(start, end) {
@@ -87,7 +156,7 @@ router.delete('/semesters/:id', requireAuth, (req, res, next) => {
 // Списки групп/преподавателей/аудиторий для селекторов.
 router.get('/entities', requireAuth, (req, res, next) => {
   try {
-    res.json(listEntities());
+    res.json({ ...listEntities(), editableGroups: [...allowedGroups(req.user)] });
   } catch (err) {
     next(err);
   }
@@ -97,7 +166,7 @@ router.get('/entities', requireAuth, (req, res, next) => {
 router.get('/schedule', requireAuth, (req, res, next) => {
   try {
     const { view, id } = req.query;
-    res.json({ view: view || null, id: id || null, lessons: getView(view, id), semester: getSemester() });
+    res.json({ view: view || null, id: id || null, lessons: decorateLessons(getView(view, id), req.user), semester: getSemester() });
   } catch (err) {
     next(err);
   }
@@ -106,7 +175,9 @@ router.get('/schedule', requireAuth, (req, res, next) => {
 // Сводное расписание за неделю: /summary?weekNo=
 router.get('/summary', requireAuth, (req, res, next) => {
   try {
-    res.json(getSummary(Number(req.query.weekNo)));
+    const data = getSummary(Number(req.query.weekNo));
+    data.lessons = decorateLessons(data.lessons || [], req.user);
+    res.json(data);
   } catch (err) {
     next(err);
   }
@@ -115,7 +186,9 @@ router.get('/summary', requireAuth, (req, res, next) => {
 // Сводное расписание АУДИТОРИЙ за неделю: /room-summary?weekNo=
 router.get('/room-summary', requireAuth, (req, res, next) => {
   try {
-    res.json(getRoomSummary(Number(req.query.weekNo)));
+    const data = getRoomSummary(Number(req.query.weekNo));
+    data.lessons = decorateLessons(data.lessons || [], req.user);
+    res.json(data);
   } catch (err) {
     next(err);
   }
@@ -201,7 +274,7 @@ router.post('/subject-aliases/apply', requireAuth, (req, res, next) => {
 // Буфер: занятия, отложенные «на потом».
 router.get('/parked', requireAuth, (req, res, next) => {
   try {
-    res.json({ lessons: getParked() });
+    res.json({ lessons: decorateLessons(getParked(), req.user) });
   } catch (err) {
     next(err);
   }
@@ -221,7 +294,7 @@ router.post('/parked/clear', requireAuth, (req, res, next) => {
 // Не размещённые при импорте: пары, попавшие на «ЭкзС» группы (полоса под сеткой).
 router.get('/orphans', requireAuth, (req, res, next) => {
   try {
-    res.json({ lessons: getOrphans() });
+    res.json({ lessons: decorateLessons(getOrphans(), req.user) });
   } catch (err) {
     next(err);
   }
@@ -241,6 +314,8 @@ router.post('/orphans/clear', requireAuth, (req, res, next) => {
 // Отложить занятие в буфер. Тело не требуется.
 router.post('/lesson/:id/park', requireAuth, (req, res, next) => {
   try {
+    if (!canEditLesson(req.user, req.params.id)) return denyGroups(res);
+    if (staleLesson(req, res, req.params.id)) return;
     const result = parkLesson(Number(req.params.id));
     if (!result.ok) return res.status(404).json(result);
     res.json({ success: true });
@@ -253,6 +328,8 @@ router.post('/lesson/:id/park', requireAuth, (req, res, next) => {
 // (ни перетаскиванием, ни из карточки, ни возвратом из журнала переносов).
 router.post('/lesson/:id/lock', requireAuth, (req, res, next) => {
   try {
+    if (!canEditLesson(req.user, req.params.id)) return denyGroups(res);
+    if (staleLesson(req, res, req.params.id)) return;
     const result = setLessonLocked(Number(req.params.id), Boolean(req.body && req.body.locked));
     if (!result.ok) return res.status(result.code || 409).json(result);
     res.json({ success: true, locked: result.locked });
@@ -287,7 +364,7 @@ router.get('/events', requireAuth, (req, res, next) => {
     const events = getView('group', null)
       .filter((l) => l.category === 'event' && !l.parked)
       .sort((a, b) => a.weekNo - b.weekNo || DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day) || a.pairNo - b.pairNo);
-    res.json({ events });
+    res.json({ events: decorateLessons(events, req.user) });
   } catch (err) {
     next(err);
   }
@@ -324,15 +401,23 @@ router.get('/free-slots', requireAuth, (req, res, next) => {
 // Перенос занятия (атомарно, с валидацией). Тело: {lessonId, day, pairNo, weekNo, room|rooms}.
 router.post('/move', requireAuth, validateBody(moveBodyErrors), (req, res, next) => {
   try {
-    const { lessonId, day, pairNo, weekNo, room, rooms, force } = req.body;
+    const { lessonId, day, pairNo, weekNo, room, rooms, force, expectedRevision } = req.body;
+    if (!canEditLesson(req.user, lessonId)) return denyGroups(res);
+    if (replayMoveCommand(req, res, lessonId)) return;
+    const current = getDb().prepare('SELECT revision FROM lessons WHERE id=?').get(Number(lessonId));
+    if (!current) return res.status(404).json({ error: 'Занятие не найдено' });
+    if (req.user.role !== 'admin' && (!Number.isInteger(Number(expectedRevision)) || Number(expectedRevision) !== Number(current.revision))) {
+      return res.status(409).json({ error: 'Занятие уже изменено. Обновите расписание', stale: true, currentRevision: current.revision });
+    }
     // force: true — составитель подтвердил размещение с предупреждением
     // (занятая аудитория / нехватка мест).
-    const target = { day, pairNo, weekNo, force: force === true };
+    const target = { day, pairNo, weekNo, force: force === true, commandId: req.body.commandId || null };
     if (Array.isArray(rooms)) target.rooms = rooms;
     else target.room = room ?? null;
-    const result = moveLesson(lessonId, target);
+    const result = moveLesson(lessonId, target, req.user);
     if (!result.ok) return res.status(409).json(result);
-    res.json({ success: true, warning: result.warning || null });
+    req.moveActionId = result.actionId;
+    res.json({ success: true, warning: result.warning || null, actionId: result.actionId });
   } catch (err) {
     next(err);
   }
@@ -342,6 +427,33 @@ router.post('/move', requireAuth, validateBody(moveBodyErrors), (req, res, next)
 router.get('/move-log', requireAuth, (req, res, next) => {
   try {
     res.json({ entries: getMoveLog() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Новый общий журнал адресных действий: авторство не зависит от порядка записей.
+router.get('/move-actions', requireAuth, (req, res, next) => {
+  try {
+    res.json({ actions: getMoveActions(req.user, req.query.limit) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/move-actions/latest-own', requireAuth, (req, res, next) => {
+  try {
+    res.json({ action: latestOwnMoveAction(req.user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/move-actions/:actionId/revert', requireAuth, (req, res, next) => {
+  try {
+    const result = revertMoveAction(req.params.actionId, req.user, Boolean(req.body && req.body.force));
+    if (!result.ok) return res.status(result.code || 409).json(result);
+    res.json({ success: true, actionId: req.params.actionId });
   } catch (err) {
     next(err);
   }
@@ -424,6 +536,9 @@ router.delete('/entity-schedule', requireAuth, (req, res, next) => {
   try {
     const { view, id } = req.query;
     if (!view || !id) return res.status(400).json({ error: 'Нужны параметры view и id' });
+    if (!['group', 'teacher', 'room'].includes(view)) return res.status(400).json({ error: 'Неизвестный тип расписания' });
+    const targets = getView(view, id);
+    if (req.user.role !== 'admin' && (!targets.length || targets.some((l) => !canEditGroups(req.user, l.groups || [])))) return denyGroups(res);
     const result = deleteEntitySchedule(view, id);
     if (!result.ok) return res.status(result.code || 404).json(result);
     res.json({ success: true, deleted: result.deleted, modified: result.modified, total: result.total });
@@ -435,6 +550,8 @@ router.delete('/entity-schedule', requireAuth, (req, res, next) => {
 // Удаление занятия. Если потоковое — удаляется целиком (одна запись = весь поток).
 router.delete('/lesson/:id', requireAuth, (req, res, next) => {
   try {
+    if (!canEditLesson(req.user, req.params.id)) return denyGroups(res);
+    if (staleLesson(req, res, req.params.id)) return;
     const result = deleteLesson(Number(req.params.id));
     if (!result.ok) return res.status(404).json(result);
     res.json({ success: true, groups: result.groups });
@@ -449,7 +566,8 @@ router.delete('/lesson/:id', requireAuth, (req, res, next) => {
 router.post('/group-teacher', requireAuth, (req, res, next) => {
   try {
     const { group, from, to, mode, subject, type } = req.body || {};
-    const result = replaceGroupTeacher(group, from, to, mode === 'all' ? 'all' : 'replace', subject || null, type || null);
+    if (!canEditGroups(req.user, group ? [group] : [])) return denyGroups(res);
+    const result = replaceGroupTeacher(group, from, to, mode === 'all' ? 'all' : 'replace', subject || null, type || null, req.user);
     if (!result.ok) return res.status(result.code || 409).json(result);
     res.json({ success: true, count: result.count });
   } catch (err) {
@@ -493,6 +611,7 @@ router.put('/room-plan/settings', requireAuth, (req, res, next) => {
 
 router.post('/room-plan/apply', requireAuth, (req, res, next) => {
   try {
+    if (!canEditItemLessons(req.user, (req.body || {}).items)) return denyGroups(res);
     const result = applyRoomPlan((req.body || {}).items);
     if (!result.ok) return res.status(result.code || 409).json(result);
     res.json({ success: true, applied: result.applied, skipped: result.skipped });
@@ -514,6 +633,7 @@ router.get('/pair4-relief', requireAuth, (req, res, next) => {
 
 router.post('/pair4-relief/apply', requireAuth, (req, res, next) => {
   try {
+    if (!canEditItemLessons(req.user, (req.body || {}).items)) return denyGroups(res);
     const result = applyPair4Relief((req.body || {}).items);
     if (!result.ok) return res.status(result.code || 409).json(result);
     res.json({ success: true, applied: result.applied, skipped: result.skipped });
@@ -590,6 +710,9 @@ router.post('/teacher-block', requireAuth, (req, res, next) => {
 // Создание занятия вручную. Тело: {day, pairNo, weekNo, subject?, type?, topic?, room?, teacher?, groups?}.
 router.post('/lessons', requireAuth, (req, res, next) => {
   try {
+    if (!canEditGroups(req.user, (req.body || {}).groups || [])) return denyGroups(res);
+    const refError = editorReferenceError(req.user, req.body || {});
+    if (refError) return res.status(403).json({ error: refError, reasons: [refError] });
     const result = createLesson(req.body || {});
     if (!result.ok) return res.status(result.code || 409).json(result);
     res.status(201).json({ success: true, id: result.id, warning: result.warning || null });
@@ -603,6 +726,7 @@ router.post('/lessons', requireAuth, (req, res, next) => {
 router.post('/vacation', requireAuth, (req, res, next) => {
   try {
     const { teacher, group, from, to, label } = req.body || {};
+    if (req.user.role !== 'admin' && (!group || !canEditGroups(req.user, [group]))) return denyGroups(res);
     const mark = (label && String(label).trim()) || 'Отп';
     const result = group ? createGroupVacation(group, from, to, mark) : createVacation(teacher, from, to, mark);
     if (!result.ok) return res.status(409).json(result);
@@ -631,9 +755,20 @@ router.post('/decommission-room', requireAuth, (req, res, next) => {
 // размещения; поток (несколько групп) обновляется атомарно.
 router.put('/lesson/:id', requireAuth, (req, res, next) => {
   try {
-    const r = editLesson(Number(req.params.id), req.body || {});
+    const id = Number(req.params.id);
+    if (!canEditLesson(req.user, id)) return denyGroups(res);
+    const nextGroups = Array.isArray((req.body || {}).groups) ? req.body.groups : groupsForLesson(id);
+    if (!canEditGroups(req.user, nextGroups)) return denyGroups(res);
+    if (replayMoveCommand(req, res, id)) return;
+    const refError = editorReferenceError(req.user, req.body || {});
+    if (refError) return res.status(403).json({ error: refError, reasons: [refError] });
+    if (req.user.role !== 'admin' && (req.body || {}).expectedRevision == null) {
+      return res.status(409).json({ error: 'Нет версии занятия. Обновите расписание', stale: true });
+    }
+    const r = editLesson(id, req.body || {}, req.user);
     if (!r.ok) return res.status(r.code || 409).json(r);
-    res.json({ success: true });
+    req.moveActionId = r.actionId;
+    res.json({ success: true, actionId: r.actionId || null });
   } catch (err) {
     next(err);
   }
@@ -645,7 +780,8 @@ router.put('/lesson/:id', requireAuth, (req, res, next) => {
 // всю базу целиком — на случай правок мимо приложения (подмена файла БД).
 router.post('/topics/sort', requireAuth, (req, res, next) => {
   try {
-    res.json({ success: true, ...sortTopics({ all: true }) });
+    const { changed } = sortTopics({ all: true });
+    res.json({ success: true, changed });
   } catch (err) {
     next(err);
   }
@@ -664,7 +800,9 @@ router.get('/errors', requireAuth, (req, res, next) => {
 // «день × группа» + список групп, праздники и диапазон дат по умолчанию.
 router.get('/session-calendar', requireAuth, (req, res, next) => {
   try {
-    res.json(getSessionCalendar());
+    const data = getSessionCalendar();
+    data.lessons = decorateLessons(data.lessons || [], req.user);
+    res.json(data);
   } catch (err) {
     next(err);
   }
@@ -673,7 +811,11 @@ router.get('/session-calendar', requireAuth, (req, res, next) => {
 // График сессии: экзамены и зачёты списком по группам (вкладка «График сессии»).
 router.get('/session-schedule', requireAuth, (req, res, next) => {
   try {
-    res.json(getSessionSchedule());
+    const data = getSessionSchedule();
+    for (const group of data.groups || []) {
+      for (const row of group.rows || []) row.editable = canEditLesson(req.user, row.id);
+    }
+    res.json(data);
   } catch (err) {
     next(err);
   }
@@ -694,9 +836,13 @@ router.get('/session-exam-targets', requireAuth, (req, res, next) => {
 router.post('/session-move-exam', requireAuth, (req, res, next) => {
   try {
     const { lessonId, weekNo, day } = req.body || {};
-    const result = moveExam(Number(lessonId), Number(weekNo), day);
+    if (!canEditLesson(req.user, lessonId)) return denyGroups(res);
+    if (replayMoveCommand(req, res, lessonId)) return;
+    if (staleLesson(req, res, lessonId)) return;
+    const result = moveExam(Number(lessonId), Number(weekNo), day, req.user, req.body.commandId || null);
     if (!result.ok) return res.status(result.code || 409).json(result);
-    res.json({ success: true, moved: result.moved, date: result.date });
+    req.moveActionId = result.actionId;
+    res.json({ success: true, moved: result.moved, date: result.date, actionId: result.actionId });
   } catch (err) {
     next(err);
   }
@@ -931,7 +1077,7 @@ router.put('/appearance', requireAuth, (req, res, next) => {
 });
 
 // Последнее действие для кнопки «Отменить».
-router.get('/undo', requireAuth, (req, res, next) => {
+router.get('/undo', requireAdmin, (req, res, next) => {
   try {
     const last = peekUndo();
     res.json(last ? { id: last.id, action: last.action, description: last.description } : {});
@@ -941,7 +1087,7 @@ router.get('/undo', requireAuth, (req, res, next) => {
 });
 
 // Отменить последнее действие.
-router.post('/undo', requireAuth, (req, res, next) => {
+router.post('/undo', requireAdmin, (req, res, next) => {
   try {
     const expectedId = req.body?.expectedId ?? null;
     const result = performUndo(expectedId);
@@ -972,7 +1118,7 @@ router.get('/publish/status', requireAuth, (req, res, next) => {
 
 // Тумблер «правка темы и примечания в публичном расписании». Читать может кто
 // угодно (гостевая страница решает, показывать ли поля ввода), менять — админ.
-const guestEditOn = () => getSetting('guestEdit') === '1';
+const guestEditOn = () => false;
 
 router.get('/guest-edit', (req, res, next) => {
   try {
@@ -984,8 +1130,8 @@ router.get('/guest-edit', (req, res, next) => {
 
 router.put('/guest-edit', requireAuth, (req, res, next) => {
   try {
-    setSetting('guestEdit', req.body && req.body.enabled ? '1' : '0');
-    res.json({ enabled: guestEditOn() });
+    setSetting('guestEdit', '0');
+    res.status(410).json({ error: 'Анонимное редактирование отключено после введения учётных записей', enabled: false });
   } catch (err) {
     next(err);
   }
@@ -1126,11 +1272,7 @@ router.put('/move-marks', requireAuth, (req, res, next) => {
 // Остальные поля игнорируются на уровне сервиса.
 router.put('/guest/lesson/:id', (req, res, next) => {
   try {
-    if (!guestEditOn()) return res.status(403).json({ error: 'Правка расписания сейчас закрыта' });
-    const { topic, note, type, publicationId } = req.body || {};
-    const result = guestEditLesson(Number(req.params.id), { topic, note, type }, publicationId);
-    if (!result.ok) return res.status(result.code || 409).json(result);
-    res.json({ success: true });
+    return res.status(403).json({ error: 'Анонимное редактирование отключено' });
   } catch (err) {
     next(err);
   }

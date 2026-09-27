@@ -7,10 +7,14 @@ const { getSetting, setSetting } = require('../services/settingsService');
 
 const READ_ONLY = /^\/(export\/|import\/preview$|login$|logout$)/;
 const OUTSIDE_SNAPSHOT = /^\/(publish|guest-[a-z]+|move-marks|appearance|password|reset-password|widget-host|room-plan\/settings|guest\/lesson\/\d+|archives(\/[^/]+)?)$/;
+const ACCESS_ONLY = /^\/(users(?:\/|$)|me\/permissions$|access-catalog$)/;
 
 function finalizeMutation(req, res) {
-  if (req.mutationFinalized || ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || READ_ONLY.test(req.path) || res.statusCode >= 400) return;
-  sortTopics();
+  if (req.mutationFinalized || ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || READ_ONLY.test(req.path) || ACCESS_ONLY.test(req.path) || res.statusCode >= 400) return;
+  const sorted = sortTopics(req.user && req.user.role !== 'admin'
+    ? { canEdit: (id) => require('../services/userService').canEditLesson(req.user, id) }
+    : {});
+  req.topicChanges = sorted.changes || [];
   const noteOnly = req.method === 'PUT' && /^\/move-log\/\d+$/.test(req.path);
   if (!noteOnly && !OUTSIDE_SNAPSHOT.test(req.path)) setSetting('unpublished', '1');
   setSetting('dataVersion', String(Number(getSetting('dataVersion') || 0) + 1));

@@ -8,12 +8,14 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const SHARED = require(path.join(ROOT, 'public', 'js', 'shared-constants.js'));
 
 const DB_PATH = process.env.DB_PATH || path.join(ROOT, 'data', 'schedule.db');
+const ACCESS_DB_PATH = process.env.ACCESS_DB_PATH || path.join(path.dirname(DB_PATH), 'access.db');
 
 module.exports = {
   ROOT,
   PORT: Number(process.env.PORT) || 443,
   HOST: process.env.HOST || '127.0.0.1',
   DB_PATH,
+  ACCESS_DB_PATH,
   // Архивы базы (снимки schedule.db) — рядом с самой базой, чтобы тесты с
   // временным DB_PATH не писали в рабочую папку data/.
   ARCHIVES_DIR: process.env.ARCHIVES_DIR || path.join(path.dirname(DB_PATH), 'archives'),

@@ -407,7 +407,7 @@
     const bad = l.prep && !l.prep.ok;
     const rng = pairRange(l), tm = pairTime(l);
     const pairLine = rng ? `пары ${rng}${tm ? ' · ' + tm : ''}` : '';
-    return `<div class="ses-a ${l.kind}${bad ? ' prep-bad' : ''}" data-id="${l.id}" draggable="true">`
+    return `<div class="ses-a ${l.kind}${bad ? ' prep-bad' : ''}${l.editable === false ? ' read-only' : ''}" data-id="${l.id}" draggable="${l.editable === false ? 'false' : 'true'}" title="${l.editable === false ? 'Только просмотр — нет доступа ко всем группам занятия' : ''}">`
       + `<div class="v">${bad ? '⚠ ' : ''}${esc(vidLabel(l))}</div>`
       + (pairLine ? `<div class="p">${esc(pairLine)}</div>` : '')
       + `<div class="d" title="${esc(l.subjectFull || '')}">${esc(l.subject)}</div>`
@@ -505,7 +505,10 @@
   // Выполнить перенос формы контроля в выбранный день и перерисовать календарь.
   async function doMove(id, weekNo, day) {
     try {
-      const r = await api.post('/api/session-move-exam', { lessonId: id, weekNo, day });
+      const lesson = state.byId.get(id);
+      const r = await api.post('/api/session-move-exam', {
+        lessonId: id, weekNo, day, expectedRevision: lesson && lesson.revision, commandId: window.crypto.randomUUID(),
+      });
       closePop();
       await loadData();
       toast(`Перенесено${r.date ? ' на ' + r.date : ''}. Отменить — кнопкой «Отменить» в админке.`);

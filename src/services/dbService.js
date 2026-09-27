@@ -54,7 +54,7 @@ function getOrCreate(db, table, uniqueCol, value, extra = {}) {
 }
 
 function clearAll(db) {
-  for (const t of ['lesson_groups', 'lessons', 'subject_teachers', 'subjects', 'rooms', 'groups', 'teachers']) {
+  for (const t of ['move_action_events', 'move_actions', 'lesson_groups', 'lessons', 'subject_teachers', 'subjects', 'rooms', 'groups', 'teachers']) {
     db.exec(`DELETE FROM ${t}`);
   }
 }

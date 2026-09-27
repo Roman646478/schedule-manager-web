@@ -10,6 +10,9 @@ window.api = {
   put(url, body) {
     return request('PUT', url, { body });
   },
+  patch(url, body) {
+    return request('PATCH', url, { body });
+  },
   // body — необязательное тело (DELETE с параметрами, напр. /group-subjects).
   del(url, body) {
     return request('DELETE', url, body === undefined ? {} : { body });

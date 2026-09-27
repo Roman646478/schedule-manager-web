@@ -28,11 +28,13 @@ const {
   PUBLIC_DB_PATH,
 } = require('./utils/constants');
 const { getDb } = require('./config/database');
+const { getAccessDb } = require('./config/accessDatabase');
 const { SqliteSessionStore } = require('./config/sessionStore');
 const { getSessionSecret, usingDefaultCredentials } = require('./services/authService');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { csrfToken, csrfProtection } = require('./middleware/csrf');
 const { sortTopics } = require('./services/topicOrderService');
+const { finalizePendingMoveActions } = require('./services/scheduleService');
 const { finalizeMutation } = require('./middleware/mutations');
 const { transaction } = require('./services/dbService');
 const { flushSnapshot } = require('./services/snapshotStore');
@@ -84,7 +86,7 @@ function createApp(opts = {}) {
     session({
       // getDb (а не getDb()): при откате к архиву файл базы подменяется и
       // соединение переоткрывается — хранилище должно брать актуальное.
-      store: new SqliteSessionStore(getDb, { ttlMs: SESSION_MAX_AGE }),
+      store: new SqliteSessionStore(getAccessDb, { ttlMs: SESSION_MAX_AGE }),
       secret: getSessionSecret(),
       resave: false,
       saveUninitialized: false,
@@ -103,12 +105,22 @@ function createApp(opts = {}) {
 
   // Проверка CSRF для всех небезопасных методов /api (кроме /login).
   app.use('/api', csrfProtection);
+  app.use('/api', require('./middleware/auth').enforceWritePolicy);
 
   const epoch = randomUUID();
   app.use('/api', (req, res, next) => {
     const json = res.json;
     res.json = function (body) {
-      try { transaction(() => finalizeMutation(req, res)); }
+      try {
+        transaction(() => {
+          finalizeMutation(req, res);
+          if (req.moveActionId) {
+            const schedule = require('./services/scheduleService');
+            schedule.attachMoveActionTopicChanges(req.moveActionId, req.topicChanges || []);
+            schedule.finalizeMoveAction(req.moveActionId);
+          }
+        });
+      }
       catch (err) { return next(err); }
       return json.call(this, body);
     };
@@ -118,6 +130,7 @@ function createApp(opts = {}) {
 
   // Роуты API (подключаются по мере реализации этапов)
   app.use('/api', require('./routes/auth'));
+  app.use('/api', require('./routes/users'));
   app.use('/api', require('./routes/import'));
   app.use('/api', require('./routes/schedule'));
   app.use('/api', require('./routes/rooms'));
@@ -192,6 +205,8 @@ function start() {
   try {
     const { changed } = sortTopics({ all: true });
     if (changed) console.log(`[темы] расставлено по порядку: ${changed}`);
+    const finalized = finalizePendingMoveActions();
+    if (finalized) console.log(`[журнал] завершено незакрытых команд переноса: ${finalized}`);
   } catch (err) {
     console.error('[темы] расстановка при старте не удалась:', err.message);
   }

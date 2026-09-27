@@ -320,6 +320,10 @@ table.grid td.no-pair {
   cursor: not-allowed;
 }
 table.grid thead th { background: var(--secondary); color: var(--secondary-foreground); font-size: 13px; padding: 8px; text-align: center; }
+#guestRoot table.grid thead th .head-date {
+  display: block; width: 100%; margin-top: 2px; font-size: 13px;
+  font-weight: inherit; line-height: 1.2; text-align: center;
+}
 table.grid .time-col { width: var(--grid-time-w); }
 table.grid .time-cell { background: var(--muted); color: var(--muted-foreground); font-size: 12px; text-align: center; padding: 8px 4px; }
 table.grid td.slot { height: var(--grid-row-h); padding: 4px; }
@@ -451,6 +455,21 @@ table.grid.dept-grid td.slot { height: auto; padding: 2px; }
 
 /* Drag & drop переноса */
 .lesson[draggable="true"] { cursor: grab; }
+.lesson.read-only, .ses-a.read-only, tr.read-only {
+  cursor: not-allowed;
+  filter: saturate(.35);
+  opacity: .68;
+  outline: 2px dashed var(--muted-foreground);
+  outline-offset: -2px;
+  position: relative;
+}
+.lesson.read-only::after {
+  content: "🔒";
+  position: absolute;
+  right: 3px;
+  top: 2px;
+  font-size: 11px;
+}
 .lesson.dragging { opacity: 0.4; }
 /* Занятие, которое переносят кликом (кнопка ⇄ в перечне): затемнено и обведено —
    при перетаскивании курсор сам показывает источник, а здесь нужен якорь. */
@@ -536,6 +555,16 @@ button.room-opt.sr-act .cap { white-space: normal; }
   display: none; align-items: center; justify-content: center; padding: 20px; z-index: 50;
 }
 .modal-backdrop.open { display: flex; }
+.users-modal { width: min(980px, 96vw); max-width: 980px; }
+.users-layout { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(420px, 1.3fr); gap: 16px; }
+.users-list, .access-picks { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); max-height: 340px; overflow: auto; padding: 8px; }
+.users-list { margin-top: 8px; }
+.user-row { display: block; width: 100%; text-align: left; padding: 8px; margin-bottom: 5px; border: 1px solid var(--border); border-radius: calc(var(--radius) / 2); background: var(--secondary); color: var(--secondary-foreground); cursor: pointer; }
+.user-row.active { border-color: var(--primary); }
+.user-row.inactive { opacity: .55; }
+.access-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 4px 10px; margin: 4px 0 10px; }
+.access-picks.groups { max-height: 230px; }
+@media (max-width: 760px) { .users-layout { grid-template-columns: 1fr; } }
 .modal {
   background: var(--card); color: var(--card-foreground);
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -967,7 +996,14 @@ table.grid.semester .wk-head { writing-mode: initial; }
 /* Даты идут отдельной строкой над парами дня — как в бумажном образце. Строка
    служебная: в неё нельзя перетаскивать занятия (нет td.slot). */
 table.grid.semester tr.date-row td { background: var(--muted); color: var(--muted-foreground); }
-table.grid.semester .date-cell { font-size: 10px; font-weight: 700; text-align: center; padding: 1px 2px; white-space: nowrap; }
+table.grid.semester .date-cell {
+  display: table-cell; width: auto; font-size: 10px; font-weight: 700;
+  line-height: 1.2; text-align: center; padding: 1px 2px; white-space: nowrap;
+}
+table.grid.semester .cell-date {
+  display: block; width: 100%; font-size: 10px; font-weight: 700;
+  line-height: 1.2; text-align: center; padding: 1px 2px; white-space: nowrap;
+}
 table.grid.semester .date-label { font-size: 10px; font-weight: 700; }
 
 table.grid.summary .grp-head { min-width: 96px; font-size: 12px; white-space: nowrap; }

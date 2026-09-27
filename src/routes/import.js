@@ -3,7 +3,7 @@
 const { commandRouter } = require('../middleware/mutations');
 const multer = require('multer');
 const { boundedMemoryStorage } = require('../middleware/boundedUpload');
-const { requireAuth } = require('../middleware/auth');
+const { requireAdmin: requireAuth } = require('../middleware/auth');
 const { importFiles } = require('../services/importService');
 const { parseSchedule } = require('../parsers/htmlScheduleParser');
 const { parseExcelSchedule } = require('../parsers/excelScheduleParser');
@@ -15,6 +15,15 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024; // Excel с оформлением за
 const MAX_FILES = 1200; // ~1000 преподавателей за раз с запасом
 
 // Принимаем HTML и Excel-расписания.
+// Browsers send multipart filenames as UTF-8, while busboy decodes those bytes
+// as latin1. Restore the original name so it still matches File.name in the UI.
+function normalizeUploadName(name) {
+  const source = String(name || '');
+  if (!/[\u00c0-\u00ff]/.test(source)) return source;
+  const decoded = Buffer.from(source, 'latin1').toString('utf8');
+  return decoded.includes('\ufffd') ? source : decoded;
+}
+
 function fileFilter(req, file, cb) {
   const ok = /\.(html?|xlsx)$/i.test(file.originalname) || /(html|spreadsheetml)/i.test(file.mimetype || '');
   cb(null, ok);
@@ -22,10 +31,11 @@ function fileFilter(req, file, cb) {
 
 async function parsedFiles(uploaded) {
   return Promise.all((uploaded || []).map(async (file) => {
-    const parsed = /\.xlsx$/i.test(file.originalname)
-      ? await parseExcelSchedule(file.buffer, file.originalname)
+    const name = normalizeUploadName(file.originalname);
+    const parsed = /\.xlsx$/i.test(name)
+      ? await parseExcelSchedule(file.buffer, name)
       : parseSchedule(file.buffer);
-    return { buffer: file.buffer, name: file.originalname, parsed };
+    return { buffer: file.buffer, name, parsed };
   }));
 }
 
@@ -108,3 +118,4 @@ router.post('/import', requireAuth, handleUpload, prepareUploaded, (req, res) =>
 });
 
 module.exports = router;
+module.exports.normalizeUploadName = normalizeUploadName;

@@ -125,16 +125,17 @@ test('статус публикации — только админу', async ()
   assert.equal((await guest('GET', '/api/publish/status')).status, 401);
 });
 
-test('правка гостя патчит и сжатую копию снимка', async () => {
-  assert.equal((await admin('PUT', '/api/guest-edit', { enabled: true })).status, 200);
+test('отключённая гостевая правка не меняет опубликованный снимок', async () => {
+  assert.equal((await admin('PUT', '/api/guest-edit', { enabled: true })).status, 410);
   const current = JSON.parse(fs.readFileSync(process.env.PUBLIC_DB_PATH, 'utf8'));
+  const before = current.lessons.find((l) => l.id === lessonId).topic;
   assert.equal((await guest('PUT', `/api/guest/lesson/${lessonId}`, {
     topic: 'Т.7',
     publicationId: current.publicationId,
-  })).status, 200);
+  })).status, 401);
   const zipped = await rawGet('/public_db.json', 'gzip');
   assert.equal(zipped.headers['content-encoding'], 'gzip');
   const snap = JSON.parse(require('node:zlib').gunzipSync(zipped.body).toString('utf8'));
-  assert.equal(snap.lessons.find((l) => l.id === lessonId).topic, 'Т.7');
-  assert.equal(await unpublished(), false, 'правка гостя уже в снимке');
+  assert.equal(snap.lessons.find((l) => l.id === lessonId).topic, before);
+  assert.equal(await unpublished(), false, 'запрещённая правка не меняет состояние');
 });

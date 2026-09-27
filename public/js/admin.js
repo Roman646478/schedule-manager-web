@@ -13,7 +13,7 @@
   // Сколько держать всплывающие уведомления/подсказки (тост и окно ошибки), мс.
   const HINT_MS = 20000;
 
-  const state = { kind: 'group', entityId: null, week: 1, mode: 'semester', summaryKind: 'group', entities: null, lessons: [], semester: null, hl: { kind: '', value: '' }, hl2: { kind: '', value: '' }, hlAny: false, holidays: new Set(), statsTab: 'teachers', statsDepts: new Set(), legend: {}, groupSubjects: {}, errors: {}, courses: {}, relocated: new Set(), srUnplaced: null, dateNotes: [], roomPlan: null, relief: null, teacherGroups: null, subjGroups: null, subjAllGroups: [] };
+  const state = { kind: 'group', entityId: null, week: 1, mode: 'semester', summaryKind: 'group', entities: null, lessons: [], semester: null, user: null, myGroupsOnly: true, hl: { kind: '', value: '' }, hl2: { kind: '', value: '' }, hlAny: false, holidays: new Set(), statsTab: 'teachers', statsDepts: new Set(), legend: {}, groupSubjects: {}, errors: {}, courses: {}, relocated: new Set(), srUnplaced: null, dateNotes: [], roomPlan: null, relief: null, teacherGroups: null, subjGroups: null, subjAllGroups: [] };
   const $ = (id) => document.getElementById(id);
 
   // Пометки «перенесено»: по занятию — сколько записей в цепочке журнала, последний
@@ -114,7 +114,9 @@
       return (location.href = '/login.html');
     }
 
+    state.user = auth.user || null;
     bindEvents();
+    applyRoleUi();
     maybeShowDefaultPwBanner(auth.usingDefaults);
     setupBufferDrop();
     setupErrorTooltip();
@@ -157,6 +159,153 @@
       await loadDateNotes(); // и примечания к датам могли поправить в другом окне
       render();
     });
+  }
+
+  function applyRoleUi() {
+    const admin = state.user && state.user.role === 'admin';
+    const adminIds = [
+      'btnSemester', 'btnCourses', 'btnAliases', 'btnRefs', 'btnEvents', 'btnHolidays',
+      'btnAppearance', 'btnUsers', 'btnPublish', 'guestExport', 'guestMoves', 'guestColors',
+      'widgetHost', 'btnArchives', 'btnClearSchedule', 'btnReset', 'fileInput', 'folderInput',
+      'btnPickFolder', 'importMerge', 'importAutoOffset', 'importTeacherFilter', 'importOffset',
+      'btnImport', 'btnSortTopics', 'btnPlaceSR', 'btnRemoveSR', 'btnRoomPlanCfg',
+      'btnDecommission', 'btnClearHiddenGroups', 'btnBlockCells', 'bufferClear',
+    ];
+    for (const id of adminIds) {
+      const el = $(id);
+      if (!el) continue;
+      const holder = el.closest('label') || el;
+      holder.hidden = !admin;
+    }
+    $('pwTarget').querySelector('option[value="reset"]').hidden = !admin;
+    if (!admin) $('pwTarget').value = 'login';
+    for (const id of ['dNewRoom', 'dNewRoom2', 'alNewRoom', 'alNewRoom2', 'alNewSubject', 'alIsEvent']) {
+      const el = $(id);
+      if (el) (el.closest('label') || el).hidden = !admin;
+    }
+  }
+
+  let usersData = [];
+  let accessCatalog = { departments: [], groups: [] };
+  let userGroupSelection = new Set();
+
+  async function openUsers() {
+    try {
+      const [u, c] = await Promise.all([api.get('/api/users'), api.get('/api/access-catalog')]);
+      usersData = u.users || [];
+      accessCatalog = c;
+      renderUsersList();
+      selectUser(usersData.find((x) => x.role === 'editor') || null);
+      $('usersModal').classList.add('open');
+    } catch (err) { toast(err.message, true); }
+  }
+
+  function renderUsersList() {
+    $('usersList').innerHTML = usersData.map((u) =>
+      `<button type="button" class="user-row${u.active ? '' : ' inactive'}" data-user-id="${u.id}">`
+      + `<b>${esc(u.username)}</b>${u.displayName ? `<div>${esc(u.displayName)}</div>` : ''}`
+      + `<small>${u.role === 'admin' ? 'Администратор' : `Групп: ${(u.effectiveGroups || []).length}`}</small></button>`
+    ).join('');
+    $('usersList').querySelectorAll('[data-user-id]').forEach((b) => {
+      b.onclick = () => selectUser(usersData.find((u) => u.id === Number(b.dataset.userId)));
+    });
+  }
+
+  function selectUser(user) {
+    $('userMsg').textContent = '';
+    $('userId').value = user ? user.id : '';
+    $('userVersion').value = user ? user.version : '';
+    $('userLogin').value = user ? user.username : '';
+    $('userLogin').disabled = Boolean(user);
+    $('userDisplayName').value = user ? user.displayName : '';
+    $('userActive').checked = user ? user.active : true;
+    $('userActiveWrap').hidden = !user || user.role === 'admin';
+    $('userPasswordFields').hidden = Boolean(user);
+    $('userPassword').value = '';
+    $('userPassword2').value = '';
+    $('userResetPassword').hidden = !user || user.role === 'admin';
+    $('userForm').querySelector('button[type="submit"]').hidden = Boolean(user && user.role === 'admin');
+    $('usersList').querySelectorAll('.user-row').forEach((b) => b.classList.toggle('active', user && Number(b.dataset.userId) === user.id));
+    const deps = new Set((user && user.departments) || []);
+    $('userDepartments').innerHTML = accessCatalog.departments.length
+      ? accessCatalog.departments.map((d) => `<label class="chk-lbl"><input type="checkbox" name="userDept" value="${esc(d)}"${deps.has(d) ? ' checked' : ''}> ${esc(d)}</label>`).join('')
+      : '<span class="muted-hint">У групп не указаны кафедры</span>';
+    $('userDepartments').onchange = updateUserEffective;
+    userGroupSelection = new Set(user ? (user.manualGroups || []) : []);
+    renderUserGroups();
+    updateUserEffective();
+  }
+
+  function renderUserGroups() {
+    const q = $('userGroupSearch').value.trim().toLowerCase();
+    const rows = (accessCatalog.groups || []).filter((g) => !q || g.name.toLowerCase().includes(q) || g.dept.toLowerCase().includes(q));
+    $('userGroups').innerHTML = rows.map((g) =>
+      `<label class="chk-lbl"><input type="checkbox" name="userGroup" value="${esc(g.name)}"${userGroupSelection.has(g.name) ? ' checked' : ''}> ${esc(g.name)}${g.dept ? ` <small>(${esc(g.dept)})</small>` : ''}</label>`
+    ).join('') || '<span class="muted-hint">Ничего не найдено</span>';
+    $('userGroups').onchange = (e) => {
+      if (e.target.name === 'userGroup') {
+        if (e.target.checked) userGroupSelection.add(e.target.value);
+        else userGroupSelection.delete(e.target.value);
+      }
+      updateUserEffective();
+    };
+  }
+
+  function userPermissionForm() {
+    return {
+      departments: [...$('userDepartments').querySelectorAll('input:checked')].map((x) => x.value),
+      manualGroups: [...userGroupSelection],
+    };
+  }
+
+  function updateUserEffective() {
+    const p = userPermissionForm();
+    const depts = new Set(p.departments);
+    const effective = new Set(p.manualGroups);
+    for (const g of accessCatalog.groups || []) if (g.dept && depts.has(g.dept)) effective.add(g.name);
+    $('userEffective').textContent = effective.size
+      ? `Итоговый доступ: ${effective.size} групп — ${[...effective].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true })).join(', ')}`
+      : 'Пользователь сможет только просматривать расписание.';
+  }
+
+  async function saveUser(e) {
+    e.preventDefault();
+    $('userMsg').textContent = '';
+    const id = Number($('userId').value) || null;
+    const perms = userPermissionForm();
+    try {
+      if (!id) {
+        if ($('userPassword').value !== $('userPassword2').value) throw new Error('Пароли не совпадают');
+        await api.post('/api/users', {
+          username: $('userLogin').value, displayName: $('userDisplayName').value,
+          password: $('userPassword').value, ...perms,
+        });
+      } else {
+        await apiRequestUserPatch(id, perms);
+      }
+      toast(id ? 'Пользователь и права обновлены' : 'Пользователь создан');
+      await openUsers();
+    } catch (err) { $('userMsg').textContent = err.message; }
+  }
+
+  async function apiRequestUserPatch(id, perms) {
+    return api.patch(`/api/users/${id}`, {
+      displayName: $('userDisplayName').value,
+      active: $('userActive').checked,
+      expectedVersion: Number($('userVersion').value),
+      ...perms,
+    });
+  }
+
+  async function resetUserPassword() {
+    const id = Number($('userId').value);
+    if (!id) return;
+    const password = window.prompt('Введите новый пароль (минимум 8 символов):');
+    if (password == null) return;
+    try {
+      await api.post(`/api/users/${id}/password-reset`, { password });
+      toast('Пароль задан, прежние сессии завершены');
+    } catch (err) { $('userMsg').textContent = err.message; }
   }
 
   async function loadLegend() {
@@ -401,6 +550,18 @@
     $('importProblemsCancel').onclick = () => $('importProblemsModal').classList.remove('open');
     $('importProblemsApply').onclick = applyImportProblems;
     $('btnArchives').onclick = openArchives;
+    $('btnUsers').onclick = openUsers;
+    $('usersClose').onclick = () => $('usersModal').classList.remove('open');
+    $('userNew').onclick = () => selectUser(null);
+    $('userForm').onsubmit = saveUser;
+    $('userGroupSearch').oninput = renderUserGroups;
+    $('userResetPassword').onclick = resetUserPassword;
+    $('myGroupsToggle').onclick = () => {
+      state.myGroupsOnly = !state.myGroupsOnly;
+      fillEntities();
+      $('myGroupsToggle').textContent = state.myGroupsOnly ? 'Показать все группы' : 'Показать мои группы';
+      render();
+    };
     $('arcClose').onclick = () => $('archivesModal').classList.remove('open');
     $('arcCreate').onclick = createArchive;
     $('arcImport').onclick = () => $('arcFile').click();
@@ -736,14 +897,18 @@
   }
 
   function fillEntities() {
-    const list = (state.entities && state.entities[state.kind + 's']) || [];
+    let list = (state.entities && state.entities[state.kind + 's']) || [];
+    const editorGroups = new Set((state.entities && state.entities.editableGroups) || []);
+    const toggle = $('myGroupsToggle');
+    toggle.hidden = !(state.kind === 'group' && state.user && state.user.role !== 'admin');
+    if (!toggle.hidden && state.myGroupsOnly) list = list.filter((g) => editorGroups.has(g));
     // У аудиторий в подписи — кафедра, примечание и число мест (roomsInfo из
     // /api/entities). Значение option остаётся голым именем: по нему идут запросы.
     const label = optionLabeller();
     const option = (n) => `<option value="${esc(n)}">${esc(label(n))}</option>`;
     $('entitySelect').innerHTML = list.length
       ? (state.kind === 'group' ? SC.courseOptionsHtml(list, state.courses, option) : list.map(option).join(''))
-      : '<option value="">— нет данных —</option>';
+      : `<option value="">${state.kind === 'group' && state.myGroupsOnly ? '— нет назначенных групп —' : '— нет данных —'}</option>`;
     // Первой берём не list[0], а первый пункт списка: у групп порядок задают курсы.
     state.entityId = ($('entitySelect').options[0] || {}).value || null;
     fillSubjGroups();
@@ -971,7 +1136,15 @@
 
   function bindLessonClicks() {
     $('gridWrap').querySelectorAll('.lesson').forEach((el) => {
-      el.onclick = () => openDetails(JSON.parse(el.dataset.lesson));
+      const lesson = JSON.parse(el.dataset.lesson);
+      const editable = lesson.editable !== false;
+      el.classList.toggle('read-only', !editable);
+      if (!editable) {
+        el.draggable = false;
+        el.removeAttribute('draggable');
+        el.title = `${el.title ? `${el.title}\n` : ''}🔒 Только просмотр — ${lesson.readOnlyReason || 'чужая группа'}`;
+      }
+      el.onclick = () => openDetails(lesson);
     });
     applyErrorMarks();
     applyRelocatedMarks();
@@ -2308,6 +2481,7 @@
   }
 
   async function onDragStart(e, lesson, el) {
+    if (lesson.editable === false) { e.preventDefault(); return; }
     dragLesson = lesson;
     dragFromBuffer = el.classList.contains('parked');
     el.classList.add('dragging');
@@ -2406,7 +2580,7 @@
     const target = { day: cell.dataset.day, pairNo: Number(cell.dataset.pair), weekNo };
     if (cell.dataset.roomFree === '1') {
       // Обе аудитории (1–2) свободны — переносим как есть, сохраняя весь набор.
-      await doMove({ lessonId: lesson.id, ...target, rooms: roomsOf(lesson) });
+      await doMove({ lessonId: lesson.id, expectedRevision: lesson.revision, ...target, rooms: roomsOf(lesson) });
     } else {
       openRoomPicker(lesson, target);
     }
@@ -2431,7 +2605,8 @@
 
   async function doMove(body) {
     try {
-      const r = await withConfirm((extra) => api.post('/api/move', { ...body, ...extra }));
+      const commandId = window.crypto.randomUUID();
+      const r = await withConfirm((extra) => api.post('/api/move', { ...body, commandId, ...extra }));
       if (r.cancelled) return;
       toast(r.data.warning ? `Перенесено · ⚠ ${r.data.warning}` : 'Занятие перенесено');
       refreshUndo();
@@ -2447,7 +2622,7 @@
   // (нужно выбрать столько аудиторий, сколько занято).
   // onPick(rooms) — что сделать с выбранным набором; по умолчанию — перенос.
   async function openRoomPicker(lesson, target, onPick) {
-    const apply = onPick || ((rooms) => doMove({ lessonId: lesson.id, ...target, rooms }));
+    const apply = onPick || ((rooms) => doMove({ lessonId: lesson.id, expectedRevision: lesson.revision, ...target, rooms }));
     const { rooms, need } = await api.get(
       `/api/free-rooms?lessonId=${lesson.id}&day=${encodeURIComponent(target.day)}&pairNo=${target.pairNo}&weekNo=${target.weekNo}`
     );
@@ -2699,13 +2874,14 @@
 
   // Удаление с подтверждением (общая часть ПКМ/Delete и карточки занятия).
   async function removeLesson(lesson) {
+    if (lesson.editable === false) { toast(lesson.readOnlyReason || 'Занятие доступно только для просмотра', true); return false; }
     const isStream = (lesson.groups || []).length > 1;
     const msg = isStream
       ? `Это потоковое занятие для групп: ${(lesson.groups || []).join(', ')}. Вы уверены, что хотите удалить его для всего потока?`
       : 'Удалить это занятие?';
     if (!confirm(msg)) return false;
     try {
-      await api.del(`/api/lesson/${lesson.id}`);
+      await api.del(`/api/lesson/${lesson.id}`, { expectedRevision: lesson.revision });
       toast('Занятие удалено');
       refreshUndo();
       render();
@@ -2761,6 +2937,10 @@
       }
       e.preventDefault();
       const lesson = JSON.parse(el.dataset.lesson);
+      if (lesson.editable === false) {
+        showCtxMenu(e, [{ label: '🔒 Только просмотр', run: () => openDetails(lesson) }]);
+        return;
+      }
       showCtxMenu(e, [
         { label: 'Копировать', hk: 'Ctrl+C', run: () => startCopy(lesson, el) },
         { label: 'Удалить', hk: 'Delete', run: () => removeLesson(lesson) },
@@ -2927,7 +3107,8 @@
   // Отложить занятие в буфер (через перетаскивание из сетки).
   async function park(lessonId) {
     try {
-      await api.post(`/api/lesson/${lessonId}/park`);
+      const lesson = (state.lessons || []).find((l) => l.id === lessonId);
+      await api.post(`/api/lesson/${lessonId}/park`, { expectedRevision: lesson && lesson.revision });
       toast('Занятие отложено в буфер');
       render();
     } catch (err) {
@@ -3449,9 +3630,13 @@
       onlyGroups: state.kind === 'subject' ? state.subjGroups : null,
       dateOf,
       editable: { 7: { field: 'type', options: typeOptions() }, 8: 'topic', 12: 'note' },
+      canEdit: (id) => ((state.lessons || []).find((l) => l.id === id) || {}).editable !== false,
       // Шлём ТОЛЬКО изменённое поле: editLesson обновляет переданное, остальное
       // оставляет как есть, а слот не меняется — проверки накладок не трогаем.
-      save: (id, field, value) => api.put(`/api/lesson/${id}`, { [field]: value }),
+      save: (id, field, value) => {
+        const lesson = (state.lessons || []).find((l) => l.id === id);
+        return api.put(`/api/lesson/${id}`, { [field]: value, expectedRevision: lesson && lesson.revision });
+      },
       toast,
       onSaved: refreshLessonInGrid,
       onMove: startMoveFromList,
@@ -3743,7 +3928,9 @@
     // списке не показываем, НО собственные группы занятия добавляем всегда (даже
     // скрытые) — иначе при сохранении карточки они бы потерялись из занятия.
     const cur = new Set(lesson.groups || []);
-    const visibleGroups = (state.entities && state.entities.groups) || [];
+    const visibleGroups = state.user && state.user.role === 'admin'
+      ? ((state.entities && state.entities.groups) || [])
+      : ((state.entities && state.entities.editableGroups) || []);
     const allGroups = [...new Set([...visibleGroups, ...cur])];
     $('dGroups').innerHTML = groupColumnsHtml(allGroups, cur);
     SC.bindCourseChecks($('dGroups'));
@@ -3756,6 +3943,7 @@
     // Замена «только по виду» имеет смысл, лишь когда вид у занятия задан.
     $('dBulkType').textContent = `«${lesson.type || ''}»`;
     $('dReplaceTypeWrap').hidden = !lesson.type;
+    $('dBulkTeacherWrap').hidden = lesson.editable === false;
     // Примечание (для потока — авто-текст, если пусто)
     $('dNote').value = lesson.note || ((lesson.groups || []).length > 1 ? streamNote(lesson) : '');
     // Режим: занятие vs мероприятие
@@ -3770,6 +3958,21 @@
     $('dNewRoom2').value = '';
     const lessonRooms = (lesson.rooms && lesson.rooms.length) ? lesson.rooms : (lesson.room ? [lesson.room] : []);
     await Promise.all([fillDetailsSubjects(lesson), fillTeacherSelect(lesson), fillDetailsRooms(lessonRooms)]);
+    const editable = lesson.editable !== false;
+    $('detailsModal').querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = !editable; });
+    $('detailsSave').hidden = !editable;
+    $('detailsDelete').hidden = !editable;
+    $('detailsLock').hidden = !editable;
+    const oldAccess = $('dAccessInfo');
+    if (oldAccess) oldAccess.remove();
+    if (!editable) {
+      $('detailsTitle').textContent += ' · только просмотр';
+      const notice = document.createElement('div');
+      notice.className = 'moved-banner';
+      notice.id = 'dAccessInfo';
+      notice.textContent = `🔒 ${lesson.readOnlyReason || 'Нет доступа ко всем группам занятия'}`;
+      $('detailsModal').querySelector('.modal-body').prepend(notice);
+    }
   }
 
   // Чекбоксы групп, разбитые на блоки по курсам (заголовок курса — сам чекбокс,
@@ -4049,7 +4252,9 @@
     const fromTeacher = detailing.teacher || ''; // кого заменяем (исходный преподаватель)
     if (bulkMode && !primary) return toast('Выберите преподавателя для массовой замены', true);
     try {
+      const commandId = window.crypto.randomUUID();
       const saved = await withConfirm((extra) => api.put(`/api/lesson/${detailing.id}`, {
+        commandId,
         expectedRevision: detailing.revision,
         day: $('dDay').value,
         pairNo: Number($('dPair').value),
@@ -4097,8 +4302,9 @@
     if (!detailing) return;
     const next = !detailing.locked;
     try {
-      await api.post(`/api/lesson/${detailing.id}/lock`, { locked: next });
+      await api.post(`/api/lesson/${detailing.id}/lock`, { locked: next, expectedRevision: detailing.revision });
       detailing.locked = next;
+      detailing.revision = Number(detailing.revision || 0) + 1;
       syncLockBtn(next);
       toast(next ? 'Занятие забронировано: перенос запрещён' : 'Бронь снята');
     } catch (err) {
@@ -4149,7 +4355,7 @@
     // Загружаем дисциплины (с их преподавателями), преподавателей, группы и
     // численность групп (для проверки «влезает ли группа в аудиторию»).
     try {
-      const [{ subjects }, { teachers, groups }, groupRows] = await Promise.all([
+      const [{ subjects }, { teachers, groups, editableGroups }, groupRows] = await Promise.all([
         api.get('/api/subjects'),
         api.get('/api/entities'),
         api.get('/api/groups').catch(() => []),
@@ -4186,8 +4392,9 @@
       renderSubjectOptions(null); // все дисциплины
       renderTeacherOptions(null); // все преподаватели
 
+      const createGroups = state.user && state.user.role === 'admin' ? (groups || []) : (editableGroups || []);
       $('alGroups').innerHTML = groupColumnsHtml(
-        groups || [],
+        createGroups,
         new Set(),
         'alGroup',
         (g) => (headcountOf(g) != null ? `${headcountOf(g)} к-т` : '')
@@ -5045,8 +5252,22 @@
 
   async function refreshUndo() {
     try {
-      const data = await api.get('/api/undo');
       const btn = $('btnUndo');
+      if (state.user && state.user.role !== 'admin') {
+        const data = await api.get('/api/move-actions/latest-own');
+        const action = data.action;
+        if (action) {
+          btn.disabled = !action.canRevert;
+          btn.dataset.actionId = action.actionId;
+          btn.title = action.canRevert ? (action.description || 'Отменить мой перенос') : 'Последний перенос уже нельзя безопасно отменить';
+        } else {
+          btn.disabled = true;
+          delete btn.dataset.actionId;
+          btn.title = '';
+        }
+        return;
+      }
+      const data = await api.get('/api/undo');
       if (data && data.action) {
         btn.disabled = false;
         btn.dataset.undoId = String(data.id);
@@ -5063,6 +5284,15 @@
 
   async function doUndo() {
     try {
+      if (state.user && state.user.role !== 'admin') {
+        const actionId = $('btnUndo').dataset.actionId;
+        if (!actionId) throw new Error('Нет доступного переноса для отмены');
+        await api.post(`/api/move-actions/${encodeURIComponent(actionId)}/revert`, {});
+        toast('Ваш перенос отменён');
+        await refreshUndo();
+        render();
+        return;
+      }
       const expectedId = Number($('btnUndo').dataset.undoId);
       if (!Number.isInteger(expectedId) || expectedId <= 0) {
         await refreshUndo();
@@ -5620,6 +5850,8 @@
   async function doImport() {
     const files = pickedImportFiles();
     if (!files.length) return toast('Выберите .html/.xlsx-файлы или папку с расписанием', true);
+    // Позднее распознавание выбранных файлов не должно затирать итог импорта.
+    importPreviewRevision++;
     const mode = $('importMerge').checked ? 'merge' : 'replace';
     const fields = { mode };
     // Авто-выравнивание по датам файла (по умолчанию) либо ручной сдвиг.
@@ -5732,13 +5964,16 @@
   }
 
   // Перед записью показываем, что именно сервер нашёл в каждом файле.
+  let importPreviewRevision = 0;
   async function updateImportPicked() {
+    const revision = ++importPreviewRevision;
     const n = pickedImportFiles().length;
     $('importStatus').textContent = n ? `Выбрано файлов: ${n} · определяю структуру…` : '';
     $('importPreview').textContent = '';
     if (!n) return;
     try {
       const { files } = await api.upload('/api/import/preview', pickedImportFiles(), {});
+      if (revision !== importPreviewRevision) return;
       const format = { html: 'HTML', 'single-cell': 'Excel: пара в одной ячейке', 'three-rows': 'Excel: три строки на пару' };
       $('importPreview').innerHTML = files.map((f) => {
         const examples = (f.examples || []).map((x) => esc(
@@ -5751,6 +5986,7 @@
       }).join('<hr>');
       $('importStatus').textContent = `Выбрано файлов: ${n} · проверьте распознавание ниже`;
     } catch (err) {
+      if (revision !== importPreviewRevision) return;
       $('importStatus').textContent = `Не удалось распознать: ${err.message}`;
     }
   }
@@ -5809,8 +6045,12 @@
     try {
       await api.post(isReset ? '/api/reset-password' : '/api/password', { currentPassword, newPassword });
       $('passwordModal').classList.remove('open');
-      toast('Пароль изменён');
-      refreshDefaultPwBanner();
+      if (isReset) {
+        toast('Пароль изменён');
+        refreshDefaultPwBanner();
+      } else {
+        location.href = '/login.html';
+      }
     } catch (err) {
       $('pwMsg').textContent = err.message;
     }

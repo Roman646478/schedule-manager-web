@@ -19,6 +19,7 @@ const { roomFitCmp, movedKey } = require(path.join(__dirname, '..', '..', 'publi
 const { pushUndo } = require('./undoService');
 const { allGroupsSummary } = require('./curriculumService');
 const { slotErrors, lessonFieldErrors, invalidInput } = require('../utils/lessonInput');
+const { getScheduleGeneration } = require('../config/accessDatabase');
 
 // Снимок состояния занятия для стека отмены.
 function lessonSnapshot(l) {
@@ -41,6 +42,8 @@ function lessonSnapshot(l) {
     parked: l.parked ?? 0,
     orphan: l.orphan ? 1 : 0, // не размещённое при импорте — восстанавливается тем же флагом
     locked: l.locked ? 1 : 0, // бронь восстанавливается вместе с занятием (undo)
+    category: l.category || (l.event ? 'event' : 'lesson'),
+    revision: Number(l.revision || 0),
   };
 }
 
@@ -227,7 +230,7 @@ function clearOrphans() {
  * (несколько групп у одной записи) переносится целиком.
  * @returns {{ok:boolean, reasons?:string[]}}
  */
-function moveLesson(lessonId, target) {
+function moveLesson(lessonId, target, actor = null) {
   const invalid = invalidInput([...slotErrors(target), ...lessonFieldErrors(target)]);
   if (invalid) return invalid;
   return transaction((tx) => {
@@ -268,6 +271,7 @@ function moveLesson(lessonId, target) {
       // переноса, которого больше нет). Снимаем ВСЮ цепочку шагов: перенос мог
       // не только добавить запись, но и стереть цепочку (возврат на импортное место).
       const logBefore = moveLogChain(tx, lessonId);
+      const actionLogFloor = actor ? tx.prepare('SELECT COALESCE(MAX(id),0) AS id FROM move_log').get().id : 0;
       logMove(tx, before, { ...target, room: names.join(', ') || null });
       // Тот же слот, другая аудитория (выбор аудитории в окне переноса) — это не
       // перенос, а смена аудитории: своя запись журнала.
@@ -281,12 +285,221 @@ function moveLesson(lessonId, target) {
       // изменённое занятие, и пере-вставить удалённое (см. undoService).
       if (srSnaps.length) pushUndo(tx, 'deleteEntity', desc, { snapshots: [snap, ...srSnaps] });
       else pushUndo(tx, 'move', desc, snap);
+      if (actor) {
+        const actionId = target.commandId || randomUUID();
+        tx.prepare(
+          `INSERT INTO move_actions(action_id, created_at, actor_user_id, actor_name, lesson_id, description, before_json, schedule_generation)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(actionId, new Date().toISOString(), actor.id, actor.displayName || actor.username, lessonId, desc,
+          JSON.stringify({ lesson: snap, displaced: srSnaps }), getScheduleGeneration());
+        tx.prepare('UPDATE move_log SET action_id=? WHERE lesson_id=? AND id>?').run(actionId, lessonId, actionLogFloor);
+        tx.prepare(
+          `INSERT INTO move_action_events(action_id, happened_at, actor_user_id, actor_name, event)
+           VALUES (?, ?, ?, ?, 'move')`
+        ).run(actionId, new Date().toISOString(), actor.id, actor.displayName || actor.username);
+        check.actionId = actionId;
+      }
     }
 
     const semester = getSemester(tx);
     const holidays = new Set(getHolidays(tx));
     const warning = holidayWarning(target.weekNo, target.day, semester, holidays);
-    return { ok: true, warning: warning || undefined };
+    return { ok: true, warning: warning || undefined, actionId: check.actionId || undefined };
+  });
+}
+
+// Финализируется после автоматической сортировки тем, чтобы revision отражал
+// окончательное состояние ответа, а не промежуточную запись переноса.
+function finalizeMoveAction(actionId, db = getDb()) {
+  const row = db.prepare("SELECT lesson_id, before_json FROM move_actions WHERE action_id=? AND status='pending'").get(actionId);
+  if (!row) return;
+  const all = loadLessons(db);
+  const beforeData = JSON.parse(row.before_json);
+  const ids = Array.isArray(beforeData.batch) ? beforeData.batch.map((x) => x.id) : [row.lesson_id];
+  const lessons = ids.map((id) => all.find((l) => l.id === id)).filter(Boolean);
+  const lesson = lessons.find((l) => l.id === row.lesson_id) || lessons[0];
+  if (!lesson) return;
+  const affected = (beforeData.topicChanges || [])
+    .map((c) => all.find((l) => l.id === c.id)).filter(Boolean).map(lessonSnapshot);
+  db.prepare("UPDATE move_actions SET after_json=?, status='active' WHERE action_id=? AND status='pending'")
+    .run(JSON.stringify(Array.isArray(beforeData.batch) || affected.length
+      ? { lesson: lessonSnapshot(lesson), batch: Array.isArray(beforeData.batch) ? lessons.map(lessonSnapshot) : undefined, affected }
+      : lessonSnapshot(lesson)), actionId);
+}
+
+function attachMoveActionTopicChanges(actionId, changes, db = getDb()) {
+  if (!actionId || !Array.isArray(changes) || !changes.length) return;
+  const row = db.prepare("SELECT lesson_id, before_json FROM move_actions WHERE action_id=? AND status='pending'").get(actionId);
+  if (!row) return;
+  const all = new Map(loadLessons(db).map((l) => [l.id, l]));
+  const topicChanges = changes
+    .filter((c) => Number(c.id) !== Number(row.lesson_id) && all.has(Number(c.id)))
+    .map((c) => ({
+      id: Number(c.id), beforeTopic: c.beforeTopic ?? null,
+      beforeRevision: Number(c.beforeRevision || 0), groups: (all.get(Number(c.id)).groups || []).slice(),
+    }));
+  if (!topicChanges.length) return;
+  const beforeData = JSON.parse(row.before_json);
+  beforeData.topicChanges = topicChanges;
+  db.prepare('UPDATE move_actions SET before_json=? WHERE action_id=?').run(JSON.stringify(beforeData), actionId);
+}
+
+// После аварийного завершения между записью переноса и отправкой ответа могли
+// остаться pending-команды. Текущее состояние уже зафиксировано в БД, поэтому
+// при запуске безопасно завершить их снимком фактического результата.
+function finalizePendingMoveActions(db = getDb()) {
+  const rows = db.prepare("SELECT action_id FROM move_actions WHERE status='pending'").all();
+  for (const row of rows) finalizeMoveAction(row.action_id, db);
+  return rows.length;
+}
+
+function getMoveActions(user, limit = 300, db = getDb()) {
+  const capped = Math.max(1, Math.min(1000, Number(limit) || 300));
+  const generation = getScheduleGeneration();
+  const actions = db.prepare(
+    `SELECT action_id AS actionId, created_at AS createdAt, actor_user_id AS actorUserId,
+            actor_name AS actorName, lesson_id AS lessonId, description, before_json AS beforeJson,
+            after_json AS afterJson, status, reverted_at AS revertedAt, reverted_by_name AS revertedByName,
+            schedule_generation AS scheduleGeneration
+       FROM move_actions ORDER BY created_at DESC LIMIT ?`
+  ).all(capped).map((r) => {
+    const before = JSON.parse(r.beforeJson).lesson;
+    const parsedAfter = r.afterJson ? JSON.parse(r.afterJson) : null;
+    const after = parsedAfter && (parsedAfter.lesson || parsedAfter);
+    return {
+      actionId: r.actionId, createdAt: r.createdAt, actorUserId: r.actorUserId,
+      actorName: r.actorName, lessonId: r.lessonId, description: r.description,
+      status: r.status, revertedAt: r.revertedAt, revertedByName: r.revertedByName,
+      before: { day: before.day, pairNo: before.pairNo, weekNo: before.weekNo, room: before.room, groups: before.groups, subject: before.subject },
+      after: after ? { day: after.day, pairNo: after.pairNo, weekNo: after.weekNo, room: after.room, groups: after.groups, subject: after.subject } : null,
+      canRevert: r.status === 'active' && r.scheduleGeneration === generation
+        && (user.role === 'admin' || Number(r.actorUserId) === Number(user.id)),
+    };
+  });
+  const remaining = capped - actions.length;
+  if (remaining <= 0) return actions;
+  const legacy = db.prepare(
+    `SELECT id, moved_at AS movedAt, groups, subject, from_day AS fromDay, from_pair AS fromPair,
+            from_week AS fromWeek, to_day AS toDay, to_pair AS toPair, to_week AS toWeek,
+            room, from_room AS fromRoom, action
+       FROM move_log WHERE action_id IS NULL AND action IN ('move','room') ORDER BY id DESC LIMIT ?`
+  ).all(remaining).map((r) => {
+    const groups = String(r.groups || '').split(',').map((x) => x.trim()).filter(Boolean);
+    return {
+      actionId: `legacy-${r.id}`, createdAt: r.movedAt, actorUserId: null,
+      actorName: 'Автор не указан — запись до обновления', lessonId: null,
+      description: r.action === 'room' ? `Смена аудитории: ${r.subject || '?'} ${r.groups || ''}` : `Перенос: ${r.subject || '?'} ${r.groups || ''}`,
+      status: 'legacy', canRevert: false,
+      before: { day: r.fromDay, pairNo: r.fromPair, weekNo: r.fromWeek, room: r.fromRoom, groups, subject: r.subject },
+      after: { day: r.toDay, pairNo: r.toPair, weekNo: r.toWeek, room: r.room, groups, subject: r.subject },
+    };
+  });
+  return [...actions, ...legacy]
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, capped);
+}
+
+function latestOwnMoveAction(user, db = getDb()) {
+  const row = db.prepare(
+    `SELECT action_id FROM move_actions WHERE actor_user_id=? AND status IN ('active','pending')
+      ORDER BY created_at DESC LIMIT 1`
+  ).get(user.id);
+  if (!row) return null;
+  return getMoveActions(user, 1000, db).find((x) => x.actionId === row.action_id) || null;
+}
+
+function restoreSnapshot(db, snap) {
+  const groups = snap.groups || [];
+  const teachers = snap.teachers || (snap.teacher ? [snap.teacher] : []);
+  const rooms = snap.rooms || (snap.room ? [snap.room] : []);
+  const teacherIds = teachers.map((n) => getOrCreate(db, 'teachers', 'name', n));
+  const roomIds = rooms.map((n) => getOrCreate(db, 'rooms', 'name', n));
+  const times = PAIR_TIMES[snap.pairNo] || {};
+  db.prepare(
+    `INSERT INTO lessons(id, day, pair_no, week_no, time_start, time_end, subject, type, topic, note,
+      parked, orphan, locked, category, teacher_id, room_id, orig_day, orig_pair, orig_week)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET day=excluded.day, pair_no=excluded.pair_no, week_no=excluded.week_no,
+       time_start=excluded.time_start, time_end=excluded.time_end, subject=excluded.subject, type=excluded.type,
+       topic=excluded.topic, note=excluded.note, parked=excluded.parked, orphan=excluded.orphan,
+       locked=excluded.locked, category=excluded.category,
+       teacher_id=excluded.teacher_id, room_id=excluded.room_id`
+  ).run(snap.id, snap.day, snap.pairNo, snap.weekNo, times.start || null, times.end || null,
+    snap.subject, snap.type, snap.topic, snap.note, snap.parked ? 1 : 0, snap.orphan ? 1 : 0,
+    snap.locked ? 1 : 0, snap.category || 'lesson', teacherIds[0] ?? null, roomIds[0] ?? null,
+    snap.day, snap.pairNo, snap.weekNo);
+  db.prepare('DELETE FROM lesson_groups WHERE lesson_id=?').run(snap.id);
+  const addGroup = db.prepare('INSERT OR IGNORE INTO lesson_groups(lesson_id, group_id) VALUES (?, ?)');
+  for (const name of groups) addGroup.run(snap.id, getOrCreate(db, 'groups', 'name', name));
+  db.prepare('DELETE FROM lesson_teachers WHERE lesson_id=?').run(snap.id);
+  const addTeacher = db.prepare('INSERT OR IGNORE INTO lesson_teachers(lesson_id, teacher_id) VALUES (?, ?)');
+  for (const id of teacherIds) addTeacher.run(snap.id, id);
+  setLessonRoomsRows(db, snap.id, roomIds);
+}
+
+function restoreMoveLogChain(db, lessonId, rows) {
+  db.prepare("DELETE FROM move_log WHERE lesson_id=? AND action IN ('move','room')").run(lessonId);
+  if (!Array.isArray(rows) || !rows.length) return;
+  const cols = Object.keys(rows[0]);
+  const sql = `INSERT INTO move_log (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`;
+  const insert = db.prepare(sql);
+  for (const row of rows) insert.run(...cols.map((c) => row[c]));
+}
+
+function revertMoveAction(actionId, user, force = false) {
+  const { canEditGroups } = require('./userService');
+  return transaction((db) => {
+    const row = db.prepare('SELECT * FROM move_actions WHERE action_id=?').get(String(actionId));
+    if (!row) return { ok: false, code: 404, reasons: ['Действие не найдено'] };
+    if (row.status !== 'active') return { ok: false, code: 409, reasons: [row.status === 'reverted' ? 'Перенос уже отменён' : 'Перенос ещё не завершён'] };
+    if (!row.schedule_generation || row.schedule_generation !== getScheduleGeneration()) {
+      return { ok: false, code: 409, reasons: ['После восстановления версии расписания это действие больше нельзя отменить'] };
+    }
+    if (user.role !== 'admin' && Number(row.actor_user_id) !== Number(user.id)) {
+      return { ok: false, code: 403, reasons: ['Можно отменять только собственные переносы'] };
+    }
+    const beforeData = JSON.parse(row.before_json);
+    const before = beforeData.lesson;
+    const afterData = JSON.parse(row.after_json);
+    const after = afterData.lesson || afterData;
+    const current = loadLessons(db).find((l) => l.id === row.lesson_id);
+    if (!current) return { ok: false, code: 409, reasons: ['Занятие удалено после переноса'] };
+    if (Number(current.revision) !== Number(after.revision)) {
+      return { ok: false, code: 409, stale: true, reasons: ['Занятие изменено после этого переноса'] };
+    }
+    const beforeBatch = Array.isArray(beforeData.batch) ? beforeData.batch : [before];
+    const afterBatch = Array.isArray(afterData.batch) ? afterData.batch : [after];
+    const affectedAfter = Array.isArray(afterData.affected) ? afterData.affected : [];
+    const currentById = new Map(loadLessons(db).map((l) => [l.id, l]));
+    if ([...afterBatch, ...affectedAfter].some((snap) => !currentById.has(snap.id) || Number(currentById.get(snap.id).revision) !== Number(snap.revision))) {
+      return { ok: false, code: 409, stale: true, reasons: ['Одно из занятий изменено после этого переноса'] };
+    }
+    const allGroups = [...beforeBatch, ...afterBatch, ...affectedAfter].flatMap((x) => x.groups || []);
+    if (!canEditGroups(user, allGroups)) {
+      return { ok: false, code: 403, reasons: ['Текущих прав на группы занятия недостаточно для отмены'] };
+    }
+    for (const snap of beforeBatch) {
+      const target = { day: snap.day, pairNo: snap.pairNo, weekNo: snap.weekNo, rooms: snap.rooms || [] };
+      const check = validateMoveById(snap.id, target, db);
+      if (!check.ok) return check;
+      const soft = confirmable(check, force);
+      if (soft) return soft;
+    }
+    for (const snap of beforeBatch) restoreSnapshot(db, snap);
+    for (const snap of beforeData.displaced || []) restoreSnapshot(db, snap);
+    const setTopic = db.prepare('UPDATE lessons SET topic=? WHERE id=?');
+    for (const change of beforeData.topicChanges || []) setTopic.run(change.beforeTopic, change.id);
+    restoreMoveLogChain(db, before.id, before.moveLogBefore || []);
+    const at = new Date().toISOString();
+    db.prepare(
+      `UPDATE move_actions SET status='reverted', reverted_at=?, reverted_by_user_id=?, reverted_by_name=?
+       WHERE action_id=? AND status='active'`
+    ).run(at, user.id, user.displayName || user.username, actionId);
+    db.prepare(
+      `INSERT INTO move_action_events(action_id, happened_at, actor_user_id, actor_name, event)
+       VALUES (?, ?, ?, ?, 'revert')`
+    ).run(actionId, at, user.id, user.displayName || user.username);
+    return { ok: true };
   });
 }
 
@@ -1263,7 +1476,7 @@ function clearSchedule() {
   return transaction((db) => {
     const deleted = db.prepare('SELECT COUNT(*) AS c FROM lessons').get().c;
     // Связи удаляем явно — не полагаемся на ON DELETE CASCADE (PRAGMA может быть выкл.).
-    for (const t of ['lesson_groups', 'lesson_rooms', 'lesson_teachers', 'lessons', 'move_log', 'undo_stack']) {
+    for (const t of ['move_action_events', 'move_actions', 'lesson_groups', 'lesson_rooms', 'lesson_teachers', 'lessons', 'move_log', 'undo_stack']) {
       db.exec(`DELETE FROM ${t}`);
     }
     return { ok: true, deleted };
@@ -2545,7 +2758,7 @@ function deleteSubjectRow(group, index) {
  * было править описание даже у занятия с уже существующей накладкой.
  * @returns {{ok:boolean, code?:number, reasons?:string[]}}
  */
-function editLesson(lessonId, fields) {
+function editLesson(lessonId, fields, actor = null) {
   const invalid = invalidInput(lessonFieldErrors(fields));
   if (invalid) return invalid;
   return transaction((db) => {
@@ -2651,6 +2864,7 @@ function editLesson(lessonId, fields) {
     // него шаг переноса или смену аудитории (ниже), и откат должен снять и его.
     const desc = `Редактирование: ${L.subject || '?'} ${(L.groups || []).join(', ')}`;
     const editSnap = { ...lessonSnapshot(L), moveLogBefore: moveLogChain(db, lessonId) };
+    const actionLogFloor = actor ? db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM move_log').get().id : 0;
     if (srSnaps.length) pushUndo(db, 'deleteEntity', desc, { snapshots: [editSnap, ...srSnaps] });
     else pushUndo(db, 'edit', desc, editSnap);
 
@@ -2683,7 +2897,24 @@ function editLesson(lessonId, fields) {
       logRoomChange(db, L, L.rooms || (L.room ? [L.room] : []), next.rooms);
     }
 
-    return { ok: true };
+    let actionId;
+    const moved = next.day !== L.day || next.pairNo !== L.pairNo || next.weekNo !== L.weekNo
+      || next.rooms.join('|') !== (L.rooms || []).join('|');
+    if (actor && moved) {
+      actionId = fields.commandId || randomUUID();
+      db.prepare(
+        `INSERT INTO move_actions(action_id, created_at, actor_user_id, actor_name, lesson_id, description, before_json, schedule_generation)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(actionId, new Date().toISOString(), actor.id, actor.displayName || actor.username, lessonId, desc,
+        JSON.stringify({ lesson: editSnap, displaced: srSnaps }), getScheduleGeneration());
+      db.prepare('UPDATE move_log SET action_id=? WHERE lesson_id=? AND id>?').run(actionId, lessonId, actionLogFloor);
+      db.prepare(
+        `INSERT INTO move_action_events(action_id, happened_at, actor_user_id, actor_name, event)
+         VALUES (?, ?, ?, ?, 'move')`
+      ).run(actionId, new Date().toISOString(), actor.id, actor.displayName || actor.username);
+    }
+
+    return { ok: true, actionId };
   });
 }
 
@@ -2700,7 +2931,7 @@ function editLesson(lessonId, fields) {
  * подгрупповые пары к одному преподавателю; пред-проверка делала бы его бесполезным.
  * @returns {{ok:boolean, code?:number, count?:number, reasons?:string[]}}
  */
-function replaceGroupTeacher(group, from, to, mode, subject, type) {
+function replaceGroupTeacher(group, from, to, mode, subject, type, actor = null) {
   return transaction((db) => {
     const toName = String(to || '').trim();
     if (!group) return { ok: false, code: 400, reasons: ['Не указана группа'] };
@@ -2724,6 +2955,15 @@ function replaceGroupTeacher(group, from, to, mode, subject, type) {
         ? `Нет занятий вида «${kind}» у преподавателя «${from}»`
         : `Нет занятий преподавателя «${from}»`;
       return { ok: false, code: 404, reasons: [mode === 'all' ? noneMsg : replaceMsg] };
+    }
+    if (actor && actor.role !== 'admin') {
+      const { canEditGroups } = require('./userService');
+      if (!canEditGroups(actor, targets.flatMap((l) => l.groups || []))) {
+        return { ok: false, code: 403, reasons: ['Массовая замена затрагивает занятие недоступной группы'] };
+      }
+      if (!db.prepare('SELECT 1 FROM teachers WHERE name=?').get(toName)) {
+        return { ok: false, code: 403, reasons: ['Можно выбирать только существующих преподавателей'] };
+      }
     }
     // Новый набор преподавателей для занятия: 'all' — только to; 'replace' — from→to.
     const newTeachers = (l) => mode === 'all'
@@ -2869,7 +3109,7 @@ function getExamMoveTargets(lessonId, db = getDb()) {
 // Перенос формы контроля перетягиванием. Экзамен идёт на день с полным ЭкзС (оно
 // заменяется у переносимых групп) и с соблюдением 3 дней подготовки; зачёт — на день
 // со свободными парами. Двигаются все пары. Атомарно, обратимо кнопкой «Отменить».
-function moveExam(lessonId, weekNo, day) {
+function moveExam(lessonId, weekNo, day, actor = null, commandId = null) {
   return transaction((tx) => {
     const all = loadLessons(tx);
     const exam = findExamRows(all, Number(lessonId));
@@ -2898,8 +3138,22 @@ function moveExam(lessonId, weekNo, day) {
         .run(wk, day, times.start, times.end, r.id);
     }
     const label = exam.kind === 'zachet' ? 'зачёта' : 'экзамена';
-    pushUndo(tx, 'deleteEntity', `Перенос ${label} ${exam.subject} ${exam.groups.join(', ')} на ${day} н${wk}`, { snapshots });
-    return { ok: true, moved: examRows.length, date: t.date };
+    const desc = `Перенос ${label} ${exam.subject} ${exam.groups.join(', ')} на ${day} н${wk}`;
+    pushUndo(tx, 'deleteEntity', desc, { snapshots });
+    let actionId;
+    if (actor) {
+      actionId = commandId || randomUUID();
+      tx.prepare(
+        `INSERT INTO move_actions(action_id, created_at, actor_user_id, actor_name, lesson_id, description, before_json, schedule_generation)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(actionId, new Date().toISOString(), actor.id, actor.displayName || actor.username, Number(lessonId), desc,
+        JSON.stringify({ lesson: snapshots.find((x) => x.id === Number(lessonId)) || snapshots[0], batch: snapshots }), getScheduleGeneration());
+      tx.prepare(
+        `INSERT INTO move_action_events(action_id, happened_at, actor_user_id, actor_name, event)
+         VALUES (?, ?, ?, ?, 'move')`
+      ).run(actionId, new Date().toISOString(), actor.id, actor.displayName || actor.username);
+    }
+    return { ok: true, moved: examRows.length, date: t.date, actionId };
   });
 }
 
@@ -2918,6 +3172,12 @@ module.exports = {
   setLessonLocked,
   clearBuffer,
   moveLesson,
+  finalizeMoveAction,
+  attachMoveActionTopicChanges,
+  finalizePendingMoveActions,
+  getMoveActions,
+  latestOwnMoveAction,
+  revertMoveAction,
   getMoveLog,
   clearMoveLog,
   deleteMoveLogEntry,

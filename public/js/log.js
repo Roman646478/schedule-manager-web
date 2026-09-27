@@ -22,13 +22,14 @@
   // html(e)   — содержимое ячейки (по умолчанию esc(value)||'—')
   // Вид записи: перенос, добавление занятия, удаление занятия. У добавления пусты
   // столбцы «откуда», у удаления — «куда»; здесь это названо словом.
-  const ACTION_LABEL = { move: 'Перенос', create: 'Добавление', delete: 'Удаление', room: 'Смена аудитории' };
+  const ACTION_LABEL = { move: 'Перенос', reverted: 'Перенос отменён', pending: 'Перенос выполняется', legacy: 'Запись до обновления' };
   const actionOf = (e) => ACTION_LABEL[e.action] || ACTION_LABEL.move;
 
   const COLS = [
     { key: 'action', label: 'Действие', width: 8, filterable: true, tdClass: 'nowrap',
       value: actionOf,
       html: (e) => `<span class="log-act log-act-${esc(e.action || 'move')}">${esc(actionOf(e))}</span>` },
+    { key: 'actorName', label: 'Автор', width: 8, filterable: true, value: (e) => e.actorName || 'Автор не указан' },
     { key: 'groups', label: 'Группы', width: 7, filterable: true, value: (e) => e.groups || '' },
     { key: 'subject', label: 'Дисциплина', width: 10, filterable: true, value: subjectText },
     { key: 'teacher', label: 'Преподаватель', width: 8, filterable: true, value: (e) => e.teacher || '' },
@@ -46,15 +47,13 @@
       value: (e) => [e.type, e.topic].filter(Boolean).join(' / ') },
     { key: 'movedAt', label: 'Дата и время', width: 7, tdClass: 'nowrap',
       value: (e) => formatMoment(e.movedAt), sortVal: (e) => e.movedAt || '' },
-    { key: 'note', label: 'Примечание', width: 7, tdClass: 'note-cell',
-      value: (e) => e.note || '',
-      html: (e) => `<input type="text" class="log-note" data-id="${e.id}" value="${esc(e.note || '')}" placeholder="Примечание…">` },
+    { key: 'note', label: 'Состояние', width: 7, tdClass: 'note-cell',
+      value: (e) => e.status === 'reverted' ? `Отменил: ${e.revertedByName || '—'}` : (e.status === 'legacy' ? 'Только история' : 'Выполнен') },
     { key: 'actions', label: 'Действия', width: 6, sortable: false, tdClass: 'log-actions',
       html: (e) =>
         (revertableIds.has(e.id)
-          ? `<button type="button" class="btn secondary sm" data-revert="${e.id}" title="${e.action === 'room' ? 'Вернуть прежнюю аудиторию' : 'Отменить перенос: вернуть занятие в предыдущую ячейку (с проверкой занятости)'}" aria-label="Отменить">↩</button>`
-          : '') +
-        `<button type="button" class="btn danger sm" data-del="${e.id}" title="Удалить запись журнала" aria-label="Удалить запись">🗑</button>` },
+          ? `<button type="button" class="btn secondary sm" data-revert="${esc(e.id)}" title="Отменить именно этот перенос" aria-label="Отменить">↩</button>`
+          : '') },
   ];
   const colByKey = Object.fromEntries(COLS.map((c) => [c.key, c]));
 
@@ -87,9 +86,7 @@
     if (focusLesson) expanded.add(`#${focusLesson}`); // пришли из карточки — цепочка раскрыта
     // Отменить можно только ПОСЛЕДНЕЕ изменение занятия: оно стоит в своей
     // целевой ячейке и аудитории. Добавление и удаление отменяются не отсюда.
-    revertableIds = new Set(
-      groups.map((g) => g.head).filter((e) => ['move', 'room'].includes(e.action || 'move')).map((e) => e.id)
-    );
+    revertableIds = new Set(entries.filter((e) => e.canRevert).map((e) => e.id));
   }
 
   document.addEventListener('DOMContentLoaded', init);
@@ -107,7 +104,7 @@
       location.href = '/login.html';
     };
     $('logSearch').oninput = render;
-    $('btnClearLog').onclick = clearLog;
+    $('btnClearLog').hidden = true;
     $('btnResetFilters').onclick = resetAll;
 
     renderHead();
@@ -115,7 +112,7 @@
   }
 
   // Полная очистка журнала (с подтверждением). Расписание не затрагивается.
-  async function clearLog() {
+  async function _clearLog() {
     if (!entries.length) return toast('Журнал уже пуст');
     if (!confirm('Очистить весь журнал переносов? Это действие необратимо. На само расписание не повлияет.')) return;
     try {
@@ -136,8 +133,27 @@
 
   async function loadLog() {
     try {
-      const data = await api.get('/api/move-log');
-      entries = data.entries || [];
+      const data = await api.get('/api/move-actions');
+      entries = (data.actions || []).map((a) => ({
+        id: a.actionId,
+        lessonId: a.lessonId,
+        action: a.status === 'reverted' ? 'reverted' : (a.status === 'pending' ? 'pending' : (a.status === 'legacy' ? 'legacy' : 'move')),
+        status: a.status,
+        canRevert: a.canRevert,
+        actorName: a.actorName,
+        revertedByName: a.revertedByName,
+        groups: ((a.before && a.before.groups) || []).join(', '),
+        subject: (a.before && a.before.subject) || '',
+        fromDay: a.before && a.before.day,
+        fromPair: a.before && a.before.pairNo,
+        fromWeek: a.before && a.before.weekNo,
+        fromRoom: a.before && a.before.room,
+        toDay: a.after && a.after.day,
+        toPair: a.after && a.after.pairNo,
+        toWeek: a.after && a.after.weekNo,
+        room: a.after && a.after.room,
+        movedAt: a.createdAt,
+      }));
     } catch (err) {
       entries = [];
       toast(err.message, true);
@@ -384,10 +400,7 @@
       };
     });
     $('logBody').querySelectorAll('[data-revert]').forEach((b) => {
-      b.onclick = () => revertEntry(Number(b.dataset.revert));
-    });
-    $('logBody').querySelectorAll('[data-del]').forEach((b) => {
-      b.onclick = () => deleteEntry(Number(b.dataset.del));
+      b.onclick = () => revertEntry(b.dataset.revert);
     });
   }
 
@@ -396,11 +409,8 @@
   // на месте и что цель свободна (иначе — причины отказа); занятая аудитория и
   // нехватка мест — предупреждение с подтверждением.
   async function revertEntry(id) {
-    const entry = entries.find((e) => e.id === id);
-    const isRoom = entry && entry.action === 'room';
-    const ask = isRoom
-      ? `Вернуть аудиторию ${entry.fromRoom || '—'}?`
-      : 'Отменить этот перенос? Занятие вернётся в предыдущую ячейку, если она свободна.';
+    const isRoom = false;
+    const ask = 'Отменить именно этот перенос? Занятие вернётся в предыдущую ячейку, если она свободна и после переноса его никто не менял.';
     if (!confirm(ask)) return;
     try {
       await send(id, false);
@@ -424,10 +434,10 @@
     }
   }
 
-  const send = (id, force) => api.post(`/api/move-log/${id}/revert`, force ? { force: true } : {});
+  const send = (id, force) => api.post(`/api/move-actions/${encodeURIComponent(id)}/revert`, force ? { force: true } : {});
 
   // Удаление записи журнала (история). На расписание не влияет.
-  async function deleteEntry(id) {
+  async function _deleteEntry(id) {
     if (!confirm('Удалить эту запись журнала? На само расписание не повлияет.')) return;
     try {
       await api.del(`/api/move-log/${id}`);

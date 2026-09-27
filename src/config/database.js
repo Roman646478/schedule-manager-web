@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS teachers (
 CREATE TABLE IF NOT EXISTS groups (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   name      TEXT NOT NULL UNIQUE,
+  access_uid TEXT UNIQUE,
   headcount INTEGER,         -- число курсантов (заполняется вручную)
   dept      TEXT,            -- кафедра (заполняется вручную)
   hidden    INTEGER NOT NULL DEFAULT 0  -- 1 = скрыта из селектора просмотра
@@ -146,10 +147,39 @@ CREATE TABLE IF NOT EXISTS move_log (
   from_room    TEXT,              -- аудитория(и) до переноса (для вывода аудитории)
   teacher      TEXT,              -- преподаватель занятия на момент переноса
   note         TEXT,              -- примечание к записи (заполняется вручную)
-  action       TEXT NOT NULL DEFAULT 'move'  -- 'move' | 'create' | 'delete'
+  action       TEXT NOT NULL DEFAULT 'move',  -- 'move' | 'create' | 'delete'
+  action_id    TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_move_log_moved_at ON move_log(moved_at);
+
+-- Адресные команды переноса. Каждая отменяется по собственному UUID.
+CREATE TABLE IF NOT EXISTS move_actions (
+  action_id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  actor_user_id INTEGER NOT NULL,
+  actor_name TEXT NOT NULL,
+  lesson_id INTEGER NOT NULL,
+  description TEXT,
+  before_json TEXT NOT NULL,
+  after_json TEXT,
+  schedule_generation TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','active','reverted')),
+  reverted_at TEXT,
+  reverted_by_user_id INTEGER,
+  reverted_by_name TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_move_actions_created ON move_actions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_move_actions_actor ON move_actions(actor_user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS move_action_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action_id TEXT NOT NULL REFERENCES move_actions(action_id),
+  happened_at TEXT NOT NULL,
+  actor_user_id INTEGER NOT NULL,
+  actor_name TEXT NOT NULL,
+  event TEXT NOT NULL CHECK(event IN ('move','revert'))
+);
 
 -- Стек отмены действий: хранит снимок состояния ДО каждого изменения.
 -- Поддерживает: move, edit, create, delete. Хранится не более 50 последних действий.
@@ -197,12 +227,38 @@ function initializeDatabase(db) {
       migrateLessonRevision(db);
       db.prepare('INSERT INTO schema_migrations VALUES (2, ?)').run(new Date().toISOString());
     }
+    if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version = 3').get()) {
+      migrateGroupAccessUid(db);
+      db.prepare('INSERT INTO schema_migrations VALUES (3, ?)').run(new Date().toISOString());
+    }
+    if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version = 4').get()) {
+      migrateMoveActions(db);
+      db.prepare('INSERT INTO schema_migrations VALUES (4, ?)').run(new Date().toISOString());
+    }
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
     throw err;
   }
   db.exec('INSERT OR IGNORE INTO topic_dirty (lesson_id) SELECT id FROM lessons');
+}
+
+function migrateMoveActions(db) {
+  const actionCols = db.prepare('PRAGMA table_info(move_actions)').all().map((c) => c.name);
+  if (!actionCols.includes('schedule_generation')) db.exec('ALTER TABLE move_actions ADD COLUMN schedule_generation TEXT');
+  const logCols = db.prepare('PRAGMA table_info(move_log)').all().map((c) => c.name);
+  if (!logCols.includes('action_id')) db.exec('ALTER TABLE move_log ADD COLUMN action_id TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_move_log_action_id ON move_log(action_id)');
+}
+
+function migrateGroupAccessUid(db) {
+  const cols = db.prepare('PRAGMA table_info(groups)').all().map((c) => c.name);
+  if (!cols.includes('access_uid')) db.exec('ALTER TABLE groups ADD COLUMN access_uid TEXT');
+  db.exec("UPDATE groups SET access_uid=lower(hex(randomblob(16))) WHERE access_uid IS NULL OR access_uid=''");
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_access_uid ON groups(access_uid)');
+  db.exec(`CREATE TRIGGER IF NOT EXISTS groups_access_uid_insert AFTER INSERT ON groups
+    WHEN NEW.access_uid IS NULL OR NEW.access_uid=''
+    BEGIN UPDATE groups SET access_uid=lower(hex(randomblob(16))) WHERE id=NEW.id; END;`);
 }
 
 function migrateLessonRevision(db) {
@@ -437,6 +493,9 @@ function closeDb() {
     db.close();
     db = null;
   }
+  // Служебная БД живёт рядом с расписанием. Закрываем обе, чтобы резервное
+  // восстановление и тестовые каталоги не оставались заблокированными Windows.
+  try { require('./accessDatabase').closeAccessDb(); } catch { /* ещё не открыта */ }
 }
 
 // Переоткрыть базу — нужно после подмены файла schedule.db (откат к архиву).

@@ -2,7 +2,7 @@
 
 const express = require('express');
 const multer = require('multer');
-const { requireAuth } = require('../middleware/auth');
+const { requireAdmin: requireAuth } = require('../middleware/auth');
 const {
   isValidArchiveId,
   listArchives,

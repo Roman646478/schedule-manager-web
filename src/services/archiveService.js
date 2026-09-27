@@ -306,6 +306,7 @@ function restoreArchive(id) {
     fs.renameSync(tmp, DB_PATH);
     const db = reopenDb();
     const lessons = db.prepare('SELECT COUNT(*) AS n FROM lessons').get().n;
+    require('../config/accessDatabase').bumpScheduleGeneration();
     fs.rmSync(rollback, { force: true });
     return { ok: true, id, safetyId: safety.id, lessons };
   } catch (err) {

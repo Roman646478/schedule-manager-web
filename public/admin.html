@@ -47,6 +47,7 @@
           </select>
           <label class="lbl">Объект</label>
           <select id="entitySelect"></select>
+          <button class="btn secondary sm block" id="myGroupsToggle" type="button" hidden>Показать все группы</button>
           <!-- Только для вида «Дисциплина»: какие учебные группы показывать. -->
           <div class="pick-drop" id="subjGroupsWrap" hidden>
             <button class="btn secondary sm block" id="subjGroupsBtn" type="button" aria-expanded="false">Группы: все</button>
@@ -147,6 +148,7 @@
             <button class="btn secondary sm block" id="btnEvents">Мероприятия</button>
             <button class="btn secondary sm block" id="btnHolidays">Нерабочие дни</button>
             <button class="btn secondary sm block" id="btnAppearance" title="Цвета видов занятий и состояний сетки, высота строк и размер шрифта. Настройки хранятся на сервере — одинаковы на всех рабочих местах">🎨 Оформление сетки</button>
+            <button class="btn secondary sm block" id="btnUsers">👥 Пользователи и права</button>
           </div>
         </details>
 
@@ -154,7 +156,7 @@
           <summary>Экспорт и печать</summary>
           <div class="group">
             <button class="btn secondary sm block" id="btnPrint" title="Печать того, что сейчас показано в сетке (панели и кнопки на лист не попадают). То же делает Ctrl+P">🖨 Печать сетки</button>
-            <button class="btn secondary sm block" id="btnQualityPrint" type="button" title="Постраничная печать таблицы через Vivliostyle: чёткий текст, повтор заголовков и корректные разрывы строк">🖨 Качественная печать</button>
+            <button class="btn secondary sm block" id="btnQualityPrint" type="button" title="Постраничная печать таблицы через Vivliostyle: чёткий текст, повтор заголовков и корректные разрывы строк">🖨 Печать</button>
             <button class="btn secondary sm block" id="btnExportGroup" title="Семестровое расписание выбранной группы в отдельный файл по шаблону «Расписание группы/Образец группа.xlsx»">⬇ Расписание группы</button>
             <button class="btn secondary sm block" id="btnExportTeacher" title="Семестровое расписание выбранного преподавателя по тому же шаблону, что и у группы (в ячейке — вид/тема, дисциплина с группами, аудитория)">⬇ Расписание преподавателя</button>
             <button class="btn secondary sm block" id="btnExportGroups" title="Семестровое расписание каждой группы — по файлу на группу, всё одним zip-архивом">⬇ Все группы (zip)</button>
@@ -168,7 +170,7 @@
           <summary>Публикация и база</summary>
           <div class="group">
             <button class="btn sm block" id="btnPublish">Опубликовать</button>
-            <label class="chk-lbl" title="На гостевой странице в перечне занятий преподавателя тему, примечание и вид занятия сможет править ЛЮБОЙ посетитель, без входа. Вид меняется только у практических занятий и только на практический: лекции, зачёты и экзамены не трогаются. Остальное остаётся только для чтения."><input type="checkbox" id="guestEdit"> Разрешить гостям править тему, примечание и вид занятия</label>
+            <label class="chk-lbl" id="guestEditWrap" hidden><input type="checkbox" id="guestEdit" disabled> Анонимное редактирование отключено</label>
             <label class="chk-lbl" title="На гостевой странице появится кнопка «⬇ Excel»: любой посетитель сможет скачать расписание открытой группы, преподавателя или сводное за неделю тем же файлом, что и админка."><input type="checkbox" id="guestExport"> Разрешить гостям скачивать расписание в Excel</label>
             <label class="chk-lbl" title="На гостевой странице в карточке занятия появится кнопка «Свободные окна»: посетитель увидит подсветку слотов, куда занятие можно было бы перенести (по группе и преподавателю, без учёта аудиторий). Сам перенос гостю недоступен."><input type="checkbox" id="guestMoves"> Разрешить гостям смотреть свободные окна</label>
             <label class="chk-lbl" title="В гостевом просмотре занятия окрашиваются в разные цвета: в расписании группы — по дисциплине, у преподавателя и в расписании дисциплины — по учебной группе. Выключите, если нужен однотонный вид."><input type="checkbox" id="guestColors"> Разные цвета занятий у гостей</label>
@@ -860,6 +862,45 @@
         <button class="btn secondary sm" id="holidaysCancel">Отмена</button>
         <button class="btn sm" id="holidaysSave">Сохранить</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="usersModal" role="dialog" aria-modal="true" aria-labelledby="usersTitle">
+    <div class="modal users-modal">
+      <h3 id="usersTitle">Пользователи и права</h3>
+      <div class="users-layout">
+        <div>
+          <button class="btn sm block" id="userNew" type="button">+ Новый пользователь</button>
+          <div class="users-list" id="usersList"></div>
+        </div>
+        <form id="userForm">
+          <input type="hidden" id="userId">
+          <input type="hidden" id="userVersion">
+          <label class="lbl">Логин</label>
+          <input id="userLogin" autocomplete="off" required>
+          <label class="lbl">Имя сотрудника</label>
+          <input id="userDisplayName" autocomplete="off">
+          <div id="userPasswordFields">
+            <label class="lbl">Пароль</label>
+            <input type="password" id="userPassword" autocomplete="new-password">
+            <label class="lbl">Повтор пароля</label>
+            <input type="password" id="userPassword2" autocomplete="new-password">
+          </div>
+          <label class="chk-lbl" id="userActiveWrap"><input type="checkbox" id="userActive" checked> Учётная запись активна</label>
+          <label class="lbl">Кафедры</label>
+          <div class="access-picks" id="userDepartments"></div>
+          <label class="lbl">Отдельные группы</label>
+          <input type="search" id="userGroupSearch" placeholder="Поиск группы">
+          <div class="access-picks groups" id="userGroups"></div>
+          <div class="file-status" id="userEffective"></div>
+          <div class="reasons" id="userMsg"></div>
+          <div class="actions">
+            <button class="btn secondary sm" id="userResetPassword" type="button" hidden>Задать новый пароль</button>
+            <button class="btn sm" type="submit">Сохранить</button>
+          </div>
+        </form>
+      </div>
+      <div class="actions"><button class="btn secondary sm" id="usersClose" type="button">Закрыть</button></div>
     </div>
   </div>
 

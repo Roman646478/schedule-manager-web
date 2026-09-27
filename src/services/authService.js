@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
 const { CONFIG_PATH, DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_RESET_PASSWORD } = require('../utils/constants');
+const { ensureAdmin, verifyUser, findUserById, setPassword } = require('./userService');
 
 // Стоимость bcrypt: 10 в проде; в тестах можно снизить (BCRYPT_ROUNDS=4) для скорости.
 const ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10;
@@ -30,6 +31,7 @@ function getConfig() {
       changed = true;
     }
     if (changed) save();
+    ensureAdmin({ username: cache.username || DEFAULT_USERNAME, passwordHash: cache.passwordHash });
     return cache;
   }
   cache = {
@@ -39,6 +41,7 @@ function getConfig() {
     sessionSecret: crypto.randomBytes(32).toString('hex'),
   };
   save();
+  ensureAdmin({ username: cache.username, passwordHash: cache.passwordHash });
   return cache;
 }
 
@@ -52,14 +55,21 @@ function save() {
 }
 
 function verifyCredentials(username, password) {
-  const cfg = getConfig();
-  return typeof password === 'string' && username === cfg.username && bcrypt.compareSync(password, cfg.passwordHash);
+  getConfig();
+  return verifyUser(username, password);
 }
 
-function changePassword(newPassword) {
-  const cfg = getConfig();
-  cfg.passwordHash = bcrypt.hashSync(newPassword, ROUNDS);
-  save();
+function changePassword(userId, currentPassword, newPassword) {
+  const result = setPassword(userId, newPassword, userId, currentPassword);
+  if (result.ok) {
+    const cfg = getConfig();
+    const row = findUserById(userId);
+    if (row && row.role === 'admin' && row.username === String(cfg.username || '').toLowerCase()) {
+      cfg.passwordHash = row.password_hash;
+      save();
+    }
+  }
+  return result;
 }
 
 function getSessionSecret() {
@@ -69,8 +79,9 @@ function getSessionSecret() {
 // Активны ли пароли по умолчанию — для предупреждения при старте и баннера в UI.
 function usingDefaultCredentials() {
   const cfg = getConfig();
+  const admin = verifyUser(cfg.username, DEFAULT_PASSWORD);
   return {
-    password: bcrypt.compareSync(DEFAULT_PASSWORD, cfg.passwordHash),
+    password: Boolean(admin && admin.role === 'admin'),
     resetPassword: bcrypt.compareSync(DEFAULT_RESET_PASSWORD, cfg.resetPasswordHash),
   };
 }

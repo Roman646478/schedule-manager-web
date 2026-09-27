@@ -1,0 +1,39 @@
+name: Web release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify version and release notes
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag and package version differ' }
+          if (-not (Test-Path "docs/releases/v$version.md")) { throw 'Release notes missing' }
+      - run: npm ci
+      - run: npm run lint
+      - run: npx playwright install chromium
+      - run: npm run test:e2e
+      - run: npm run build:web
+      - name: Archive and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $name = "schedule-manager-web-$env:GITHUB_REF_NAME"
+          Compress-Archive -LiteralPath "dist/$name" -DestinationPath "dist/$name.zip"
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name.zip" | Set-Content "dist/$name.zip.sha256" -Encoding utf8NoBOM
+          gh release create $env:GITHUB_REF_NAME "dist/$name.zip" "dist/$name.zip.sha256" --verify-tag --title "Веб-версия $env:GITHUB_REF_NAME" --notes-file "docs/releases/$env:GITHUB_REF_NAME.md"

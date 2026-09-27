@@ -997,7 +997,7 @@
     for (const d of DAYS) {
       const dt = dateOf(state.week, d);
       const hol = isHolidayDay(state.week, d);
-      html += `<th${hol ? ' class="holiday-day"' : ''}>${d}${dt ? `<br><small>${esc(dt)}</small>` : ''}${hol ? '<br><small class="hol-label">нерабочий</small>' : ''}</th>`;
+      html += `<th${hol ? ' class="holiday-day"' : ''}>${d}${dt ? `<span class="head-date">${esc(dt)}</span>` : ''}${hol ? '<br><small class="hol-label">нерабочий</small>' : ''}</th>`;
     }
     html += '</tr></thead><tbody>';
     for (const p of PAIRS) {
@@ -1061,7 +1061,7 @@
     for (const d of DAYS) {
       const dt = dateOf(state.week, d);
       const hol = isHolidayDay(state.week, d);
-      html += `<th${hol ? ' class="holiday-day"' : ''}>${d}${dt ? `<br><small>${esc(dt)}</small>` : ''}${hol ? '<br><small class="hol-label">нерабочий</small>' : ''}</th>`;
+      html += `<th${hol ? ' class="holiday-day"' : ''}>${d}${dt ? `<span class="head-date">${esc(dt)}</span>` : ''}${hol ? '<br><small class="hol-label">нерабочий</small>' : ''}</th>`;
     }
     html += '</tr></thead><tbody>';
     for (const t of shown) {

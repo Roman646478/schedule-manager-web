@@ -386,11 +386,11 @@ window.TeacherTables = (function () {
     }
     if (!rows.length) return `<tr><td colspan="${TEACHER_ROW_COLS.length + 1}">Ничего не найдено по фильтрам</td></tr>`;
     return rows.map(({ l, cells }) =>
-      `<tr data-lid="${l.id}">` +
-      cells.map((v, i) => tlCellHtml(l, edit[i], String(v == null ? '' : v))).join('') +
+      `<tr data-lid="${l.id}"${tlCtx.canEdit && !tlCtx.canEdit(l.id) ? ' class="read-only"' : ''}>` +
+      cells.map((v, i) => tlCellHtml(l, tlCtx.canEdit && !tlCtx.canEdit(l.id) ? null : edit[i], String(v == null ? '' : v))).join('') +
       (acts
         ? '<td class="tl-acts">' +
-          (tlCtx.onMove ? `<button type="button" class="btn secondary sm" data-tl-move="${l.id}" title="Перенести: сетка подсветит свободные окна, кликните нужное">⇄</button>` : '') +
+          (tlCtx.onMove && (!tlCtx.canEdit || tlCtx.canEdit(l.id)) ? `<button type="button" class="btn secondary sm" data-tl-move="${l.id}" title="Перенести: сетка подсветит свободные окна, кликните нужное">⇄</button>` : '') +
           (tlCtx.onOpen ? `<button type="button" class="btn secondary sm" data-tl-open="${l.id}" title="Открыть карточку занятия">✎</button>` : '') +
           '</td>'
         : '<td class="tl-acts"></td>') +

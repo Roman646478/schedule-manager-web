@@ -6,9 +6,12 @@ const crypto = require('node:crypto');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
-const OUT = path.join(DIST, 'schedule-manager');
+const webOnly = process.argv.includes('--web');
+const version = require('../package.json').version;
+const outputName = webOnly ? `schedule-manager-web-v${version}` : 'schedule-manager';
+const OUT = path.join(DIST, outputName);
 
-if (path.dirname(OUT) !== DIST || path.basename(OUT) !== 'schedule-manager') {
+if (path.dirname(OUT) !== DIST || !/^schedule-manager(?:-web-v\d+\.\d+\.\d+)?$/.test(path.basename(OUT))) {
   throw new Error(`Небезопасный каталог сборки: ${OUT}`);
 }
 
@@ -34,6 +37,12 @@ const entries = [
   'установить-виджет.bat',
   'отключить-виджет.bat',
 ];
+const webEntries = [
+  'src', 'public', 'scripts/backup.ps1', 'scripts/generate-cert.js',
+  'Еженедельное расписание/Образец.xlsx', 'Расписание группы/Образец группа.xlsx',
+  'package.json', 'package-lock.json', '.env.example', 'README.md',
+  `docs/releases/v${version}.md`, 'запустить-сайт.bat',
+];
 
 function copy(relative) {
   const source = path.join(ROOT, relative);
@@ -48,7 +57,7 @@ function copy(relative) {
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
-for (const entry of entries) copy(entry);
+for (const entry of webOnly ? webEntries : entries) copy(entry);
 
 const files = [];
 function walk(dir) {
@@ -71,7 +80,7 @@ const manifest = files.map((file) => {
 });
 fs.writeFileSync(
   path.join(OUT, 'release-manifest.json'),
-  `${JSON.stringify({ generatedAt: new Date().toISOString(), node: process.version, files: manifest }, null, 2)}\n`,
+  `${JSON.stringify({ version, variant: webOnly ? 'web' : 'full', generatedAt: new Date().toISOString(), node: process.version, files: manifest }, null, 2)}\n`,
   'utf8'
 );
 
