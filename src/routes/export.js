@@ -133,7 +133,7 @@ router.post('/export/guest-view', allowGuestExport, async (req, res, next) => {
   try {
     const { kind, id, deptKind, weeks } = req.body || {};
     if (!['room', 'dept'].includes(kind) || typeof id !== 'string' || !id.trim() ||
-        (kind === 'dept' && !['room', 'teacher'].includes(deptKind)) ||
+        (kind === 'dept' && !['room', 'room-matrix', 'teacher'].includes(deptKind)) ||
         !Array.isArray(weeks) || !weeks.length || weeks.length > 104 ||
         weeks.some((week) => !Number.isInteger(week) || week < 1 || week > 104)) {
       return res.status(400).json({ error: 'Укажите вид расписания, объект и корректные недели' });

@@ -54,7 +54,7 @@
 
   const $ = (id) => document.getElementById(id);
   // Сводные виды: вся неделя и один день — данные и элементы управления общие.
-  const isSummary = () => state.mode === 'summary' || state.mode === 'day';
+  const isSummary = () => state.mode === 'summary' || (state.mode === 'day' && !deptRows('room-matrix'));
   // Открыт ли вид «Кафедра» со строками-преподавателями ('teacher') или
   // строками-аудиториями ('room').
   const deptRows = (what) => state.kind === 'dept' && state.deptKind === what;
@@ -258,7 +258,7 @@
     if (KIND_LABEL[kind]) { state.kind = kind; $('viewKind').value = kind; }
     // Что показать по кафедре: преподавателей или аудитории.
     const dk = Q.get('dk');
-    if (dk === 'teacher' || dk === 'room') { state.deptKind = dk; $('deptKind').value = dk; }
+    if (dk === 'teacher' || dk === 'room' || dk === 'room-matrix') { state.deptKind = dk; $('deptKind').value = dk; }
     const raw = Q.get('week');
     const want = raw == null || raw === 'cur' ? currentWeek() : Number(raw);
     if (want) state.week = Math.min(semesterWeeks(), Math.max(1, want));
@@ -645,7 +645,7 @@
 
   function fillEntities() {
     if (state.kind === 'dept') {
-      const depts = state.deptKind === 'room' ? roomDeptList() : deptList();
+      const depts = state.deptKind !== 'teacher' ? roomDeptList() : deptList();
       $('entitySelect').innerHTML =
         depts.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('') || '<option value="">—</option>';
       state.entityId = ($('entitySelect').options[0] || {}).value || null;
@@ -804,7 +804,9 @@
     // Кафедра показывается только за неделю: месяц и семестр на десяток
     // преподавателей сразу не читаются, поэтому режим здесь не спрашиваем.
     if (state.kind === 'dept') {
-      if (state.deptKind === 'room') renderRoomDept(); else renderDept();
+      if (state.deptKind === 'room') renderRoomDept();
+      else if (state.deptKind === 'room-matrix') renderRoomMatrix();
+      else renderDept();
       showFreeSlots();
       return;
     }
@@ -951,7 +953,7 @@
       `<div class="subj">${esc(l.subject || '—')}</div>` +
       // В виде «Кафедра» подпись блока (фамилия или аудитория) в карточке лишняя,
       // а лишняя строка × 4 пары × N блоков заметно тянет таблицу вниз.
-      (deptRows('room') ? '' : `<div class="meta">${esc(roomStr(l) || '—')}</div>`) +
+      (deptRows('room') || deptRows('room-matrix') ? '' : `<div class="meta">${esc(roomStr(l) || '—')}</div>`) +
       `<div class="meta">${esc((l.groups || []).join(', '))}</div>` +
       (deptRows('teacher') ? '' : `<div class="meta">${esc(l.teacher || '')}</div>`) + '</div>'
     );
@@ -1153,6 +1155,75 @@
           html += `<td class="slot${hol ? ' holiday-col' : ''}${cell.some(isEvent) ? ' slot-event' : ''}" data-room="${esc(r)}" data-day="${esc(d)}" data-pair="${p}">`;
           for (const l of cell) html += card(l);
           if (hol && !cell.length) html += '<div class="holiday-mark">Вых</div>';
+          html += '</td>';
+        }
+        html += '</tr>';
+      }
+    }
+    html += '</tbody></table></div>';
+    $('grid').innerHTML = html;
+    fillHlValues();
+    applyHighlights();
+  }
+
+  // Второй вид аудиторий кафедры: дни и пары идут строками, аудитории —
+  // столбцами. Пустые аудитории остаются, чтобы структура не менялась от недели.
+  function renderRoomMatrix() {
+    const dept = state.entityId;
+    if (!roomsInfo().length) {
+      $('title').textContent = KIND_LABEL.dept;
+      $('grid').innerHTML =
+        '<p class="file-status">В опубликованном снимке нет справочника аудиторий. Обновите публикацию в админке — вид появится.</p>';
+      return;
+    }
+    const rooms = dept ? deptRooms(dept) : [];
+    const days = state.mode === 'day' ? [DAYS.includes(state.day) ? state.day : todayDay()] : DAYS;
+    const dayLabel = state.mode === 'day' ? ` · ${days[0]}` : '';
+    $('title').textContent = `${KIND_LABEL.dept}: ${dept || '—'} · Аудитории (2)${dayLabel} · неделя ${state.week}`;
+    if (!rooms.length) {
+      $('grid').innerHTML = '<p class="file-status">У этой кафедры нет аудиторий.</p>';
+      return;
+    }
+
+    const mine = new Set(rooms);
+    const all = (state.db.lessons || []).filter((l) => roomsOf(l).some((room) => mine.has(room)));
+    buildTints(all);
+    const weekLessons = all.filter((l) => l.weekNo === state.week);
+    const at = (room, day, pairNo) => weekLessons.filter(
+      (l) => l.day === day && l.pairNo === pairNo && roomsOf(l).includes(room)
+    );
+    const info = new Map(roomsInfo().map((room) => [room.name, room]));
+    const roomDetails = (name) => {
+      const room = info.get(name) || {};
+      return [room.note, room.capacity != null ? `${room.capacity} ${SC.seats(room.capacity)}` : '']
+        .filter(Boolean).join(' · ');
+    };
+
+    let html = '<div class="grid-scroll room-matrix-scroll"><table class="grid room-matrix"><thead><tr>';
+    html += '<th class="day-col">День</th><th class="time-col">Пара / часы</th>';
+    for (const room of rooms) {
+      const details = roomDetails(room);
+      html += `<th class="room-col" data-room="${esc(room)}" title="${esc(details)}">${esc(room)}` +
+        `${details ? `<span class="room-sub">${esc(details)}</span>` : ''}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    for (const day of days) {
+      for (const pairNo of PAIRS) {
+        const hasPair = SC.pairsForDay(day).includes(pairNo);
+        html += '<tr>';
+        if (pairNo === PAIRS[0]) {
+          const date = dateOf(state.week, day);
+          html += `<td class="day-col" rowspan="${PAIRS.length}">${day}` +
+            `${date ? `<span class="cell-date">${esc(date)}</span>` : ''}</td>`;
+        }
+        html += `<td class="time-cell"><b>${SC.pairHours(pairNo)}</b><br>${PAIR_TIMES[pairNo]}</td>`;
+        for (const room of rooms) {
+          if (!hasPair) { html += '<td class="no-pair"></td>'; continue; }
+          const cell = at(room, day, pairNo);
+          const holiday = isHolidayDay(state.week, day);
+          html += `<td class="slot${holiday ? ' holiday-col' : ''}${cell.some(isEvent) ? ' slot-event' : ''}" data-room="${esc(room)}" data-day="${esc(day)}" data-pair="${pairNo}">`;
+          for (const lesson of cell) html += card(lesson);
+          if (holiday && !cell.length) html += '<div class="holiday-mark">Вых</div>';
           html += '</td>';
         }
         html += '</tr>';

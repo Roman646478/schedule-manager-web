@@ -17,6 +17,64 @@ async function login(page) {
   await expect(page.locator('#btnLogout')).toBeVisible();
 }
 
+test('вид «Кафедра → Аудитории (2)» строит недельную и дневную матрицу в госте и виджете', async ({ page }) => {
+  const snapshot = {
+    semester: { start: '2026-08-31', end: '2026-09-30' },
+    groups: ['Г-101', 'Г-102'],
+    teachers: ['Петров П.П.'],
+    rooms: ['101', '102', '201'],
+    roomsInfo: [
+      { name: '101', dept: 'Кафедра А', capacity: 30, note: 'КК' },
+      { name: '102', dept: 'Кафедра А', capacity: 25, note: '' },
+      { name: '201', dept: 'Кафедра Б', capacity: 20, note: '' },
+    ],
+    teacherDept: { 'Петров П.П.': 'Кафедра А' },
+    courses: {},
+    subjects: [],
+    holidays: [],
+    moveMarks: [],
+    lessons: [
+      { id: 1, weekNo: 1, day: 'Пн', pairNo: 1, room: '101', groups: ['Г-101'], teacher: 'Петров П.П.', subject: 'МАТРИЦА-А', type: 'Л' },
+      { id: 2, weekNo: 1, day: 'Пн', pairNo: 1, room: '102', groups: ['Г-102'], teacher: 'Петров П.П.', subject: 'МАТРИЦА-Б', type: 'ПЗ' },
+    ],
+  };
+  await page.route('**/public_db.json', (route) => route.fulfill({ json: snapshot }));
+  await page.goto('/weekly.html?kind=dept&dk=room-matrix&mode=week&week=1&e=%D0%9A%D0%B0%D1%84%D0%B5%D0%B4%D1%80%D0%B0%20%D0%90');
+
+  await expect(page.locator('#deptKind')).toHaveValue('room-matrix');
+  await expect(page.locator('#deptKind option[value="room-matrix"]')).toHaveText('Аудитории (2)');
+  const roomHeaders = page.locator('table.room-matrix thead th.room-col');
+  await expect(roomHeaders).toHaveCount(2);
+  await expect(roomHeaders.nth(0)).toHaveAttribute('data-room', '101');
+  await expect(roomHeaders.nth(1)).toHaveAttribute('data-room', '102');
+  await expect(page.locator('table.room-matrix tbody tr')).toHaveCount(24);
+  await expect(page.locator('table.room-matrix tbody .day-col')).toHaveCount(6);
+  await expect(page.locator('table.room-matrix tbody .day-col').first()).toHaveAttribute('rowspan', '4');
+  await expect(page.locator('td[data-room="101"][data-day="Пн"][data-pair="1"]')).toContainText('МАТРИЦА-А');
+  await expect(page.locator('td[data-room="102"][data-day="Пн"][data-pair="1"]')).toContainText('МАТРИЦА-Б');
+  await expect(page.locator('table.room-matrix')).not.toContainText('201');
+  await page.screenshot({ path: test.info().outputPath('room-matrix-week.png'), fullPage: true });
+
+  // Прежний вариант «Аудитории» остаётся доступен и не подменяется матрицей.
+  await page.locator('#deptKind').selectOption('room');
+  await expect(page.locator('table.dept-grid')).toBeVisible();
+  await expect(page.locator('table.room-matrix')).toHaveCount(0);
+
+  await page.locator('#deptKind').selectOption('room-matrix');
+  await page.locator('[data-mode="day"]').click();
+  await expect(page.locator('table.room-matrix tbody tr')).toHaveCount(4);
+  await expect(page.locator('table.room-matrix tbody .day-col')).toHaveCount(1);
+  await expect(page.locator('#viewKind')).toBeEnabled();
+  await expect(page.locator('#entitySelect')).toBeEnabled();
+
+  await page.goto('/weekly.html?widget=1&kind=dept&dk=room-matrix&mode=week&week=1&e=%D0%9A%D0%B0%D1%84%D0%B5%D0%B4%D1%80%D0%B0%20%D0%90');
+  await expect(page.locator('body')).toHaveClass(/widget/);
+  await expect(page.locator('table.room-matrix tbody tr')).toHaveCount(24);
+  await expect(page.locator('table.room-matrix thead th.room-col')).toHaveCount(2);
+  await expect(page.locator('table.room-matrix thead th.room-col').nth(0)).toHaveAttribute('data-room', '101');
+  await expect(page.locator('table.room-matrix thead th.room-col').nth(1)).toHaveAttribute('data-room', '102');
+});
+
 test('вход открывает админку без ошибок JavaScript', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));

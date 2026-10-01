@@ -8,7 +8,7 @@
 
 ## Версии и веб-сборка
 
-Текущий выпуск: **v0.3.0**. [Основные изменения](docs/releases/v0.3.0.md).
+Текущий выпуск: **v0.4.0**. [Основные изменения](docs/releases/v0.4.0.md).
 Каждый выпуск хранится в GitHub Releases с отдельным тегом `vX.Y.Z`,
 описанием изменений, ZIP-архивом и файлом SHA-256.
 
@@ -49,6 +49,8 @@
 ```bash
 npm install
 npm start          # https://127.0.0.1  (порт 443; npm run dev — с автоперезапуском)
+npm run build:full # полная версия в отдельной папке dist/schedule-manager-full-vX.Y.Z
+npm run build:web  # веб-версия в отдельной папке dist/schedule-manager-web-vX.Y.Z
 npm test           # юнит/интеграционные тесты (node --test)
 npm run test:e2e   # браузерные smoke-сценарии (Playwright/Chromium)
 npm run check      # линтер + оба набора тестов

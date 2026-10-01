@@ -176,6 +176,7 @@ test('аудитория и кафедра: Excel содержит только 
   for (const target of [
     { kind: 'room', id: 'А-101' },
     { kind: 'dept', id: '81', deptKind: 'room' },
+    { kind: 'dept', id: '81', deptKind: 'room-matrix' },
     { kind: 'dept', id: '(без кафедры)', deptKind: 'teacher' },
   ]) {
     const res = await guest('POST', '/api/export/guest-view', { ...target, weeks: [1, 2] });

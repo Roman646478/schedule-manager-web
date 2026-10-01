@@ -7,11 +7,15 @@ const crypto = require('node:crypto');
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const webOnly = process.argv.includes('--web');
+const versionedFull = process.argv.includes('--versioned');
 const version = require('../package.json').version;
-const outputName = webOnly ? `schedule-manager-web-v${version}` : 'schedule-manager';
+if (webOnly && versionedFull) throw new Error('Нельзя одновременно указать --web и --versioned');
+const outputName = webOnly
+  ? `schedule-manager-web-v${version}`
+  : versionedFull ? `schedule-manager-full-v${version}` : 'schedule-manager';
 const OUT = path.join(DIST, outputName);
 
-if (path.dirname(OUT) !== DIST || !/^schedule-manager(?:-web-v\d+\.\d+\.\d+)?$/.test(path.basename(OUT))) {
+if (path.dirname(OUT) !== DIST || !/^schedule-manager(?:-(?:web|full)-v\d+\.\d+\.\d+)?$/.test(path.basename(OUT))) {
   throw new Error(`Небезопасный каталог сборки: ${OUT}`);
 }
 

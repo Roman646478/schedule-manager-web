@@ -356,6 +356,16 @@ table.grid.dept-grid tr.dept-row1 > th { border-top: 3px solid var(--muted-foreg
 table.grid.dept-grid .time-cell { padding: 2px 4px; font-size: 11px; line-height: 1.25; }
 table.grid.dept-grid td.slot { height: auto; padding: 2px; }
 
+/* Матрица аудиторий кафедры: дни и пары идут строками, аудитории — столбцами. */
+.room-matrix-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+table.grid.room-matrix { width: max-content; min-width: 100%; table-layout: auto; }
+table.grid.room-matrix .day-col { min-width: 62px; background: var(--secondary); color: var(--secondary-foreground); text-align: center; vertical-align: middle; font-weight: 700; }
+table.grid.room-matrix .time-cell { min-width: 86px; padding: 3px 4px; font-size: 11px; line-height: 1.25; }
+table.grid.room-matrix .room-col { min-width: 132px; max-width: 220px; white-space: normal; }
+table.grid.room-matrix .room-sub { display: block; margin-top: 2px; font-size: 10px; font-weight: 400; opacity: .75; }
+table.grid.room-matrix td.slot { min-width: 132px; height: auto; padding: 2px; vertical-align: top; }
+table.grid.room-matrix .cell-date { display: block; margin-top: 2px; font-size: 10px; font-weight: 400; }
+
 .lesson {
   background: var(--accent); color: var(--accent-foreground);
   border-radius: calc(var(--radius) - 0.35rem);
@@ -1554,7 +1564,9 @@ body.widget .grid-scroll { background: transparent; }
    Для таблицы height — это минимум: если строк больше, чем помещается, таблица
    вырастет и прокрутится как обычно. 44px — отступы .main сверху и снизу. */
 body.widget #grid > .grid-scroll { height: 100%; }
+body.widget #grid > .room-matrix-scroll { height: 100%; overflow: auto; }
 body.widget table.grid { height: 100%; }
+body.widget table.grid.room-matrix { height: auto; }
 
 /* Подписи (шапка групп, часы, дни) — без заливки и по центру ячейки: на
    тёмном стекле заливка только режет фон светлыми полосами. */

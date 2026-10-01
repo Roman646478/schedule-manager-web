@@ -9,7 +9,7 @@ const teachersOf = (l) => [...new Set([l.teacher, ...(l.teachers || [])].filter(
 
 // Все данные, включая принадлежность кафедре, берём из опубликованного снимка.
 async function exportGuestView(snapshot, { kind, id, deptKind, weeks }) {
-  const byRoom = kind === 'room' || deptKind === 'room';
+  const byRoom = kind === 'room' || deptKind === 'room' || deptKind === 'room-matrix';
   const membersOf = byRoom ? roomsOf : teachersOf;
   let members;
   if (kind === 'room') members = (snapshot.rooms || []).filter((name) => name === id);

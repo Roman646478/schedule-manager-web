@@ -1,6 +1,6 @@
 {
   "name": "schedule-manager",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Менеджер расписания вуза: импорт HTML-расписаний, проверка накладок, перенос пар",
   "main": "src/server.js",
   "type": "commonjs",
@@ -11,6 +11,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "build": "node scripts/build-release.js",
+    "build:full": "node scripts/build-release.js --versioned",
     "build:web": "node scripts/build-release.js --web",
     "test": "node --test",
     "test:e2e": "playwright test",
